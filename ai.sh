@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 # ============================================================
-#   AI PLATFORM  ·  DeepSeek Chat + Agent  ·  single-file app
-#   Usage:  ./ai_platform.sh [port]      (default: 8080)
-#   Works on: any Linux with bash + curl
+#   AI RUNNER  ·  DeepSeek  ·  Web + Terminal UI
+#   Repo:  https://github.com/AyhanMansur/AyhanX-Agent
+#   Usage:
+#     ./ai.sh                → interactive menu
+#     ./ai.sh web [port]     → browser UI on :8080
+#     ./ai.sh tui            → terminal chat
+#     ./ai.sh "prompt"       → one-shot answer
 # ============================================================
 set -euo pipefail
 
-PORT="${1:-8080}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="${HOME}/.ai_platform"
 VENV="${APP_DIR}/.venv"
-PY_APP="${APP_DIR}/app.py"
 
-# ---------- ANSI palette ----------
+# ---------- Palette ----------
 if [[ -t 1 ]]; then
   B1=$'\e[38;5;33m'; B2=$'\e[38;5;39m'; B3=$'\e[38;5;45m'; B4=$'\e[38;5;51m'
   BD=$'\e[1m'; DM=$'\e[2m'; RS=$'\e[0m'
@@ -37,7 +40,7 @@ print_banner() {
     printf '%s%s%s\n' "${BD}${colors[$i]}" "${lines[$i]}" "$RS"
   done
   printf '%-100s\n' | sed 's/ /─/g' | sed "s/^/${DM}${B2}/; s/$/${RS}/"
-  printf '  %s%sAI Platform%s   %s·%s   %sDeepSeek Chat + Agent%s   %s·%s   %sv1.2%s\n\n' \
+  printf '  %s%sAI Runner%s   %s·%s   %sDeepSeek%s   %s·%s   %sWeb + Terminal%s\n\n' \
     "$BD" "$B4" "$RS" "$DM" "$RS" "$BD" "$RS" "$DM" "$RS" "$DM" "$RS"
 }
 
@@ -46,143 +49,224 @@ ok()      { printf '%s  ✓%s %s\n' "$B4" "$RS" "$*"; }
 warn()    { printf '%s  !%s %s\n' "$B3" "$RS" "$*"; }
 err()     { printf '%s  ✗%s %s\n' "$B1" "$RS" "$*" >&2; }
 
-print_banner
-
 # ============================================================
-#  Step 1 — find a usable Python (3.10–3.13) OR install one
+#  ENVIRONMENT
 # ============================================================
-section "Checking environment"
-
-is_good_python() {
-  # returns 0 if $1 is python 3.10..3.13
-  local bin="$1"
-  command -v "$bin" >/dev/null 2>&1 || return 1
-  "$bin" -c 'import sys; sys.exit(0 if (3,10)<=sys.version_info[:2]<=(3,13) else 1)' 2>/dev/null
+find_python() {
+  for c in python3.12 python3.11 python3.10 python3.13 python3; do
+    if command -v "$c" >/dev/null 2>&1 \
+       && "$c" -c 'import sys; sys.exit(0 if (3,10)<=sys.version_info[:2]<=(3,13) else 1)' 2>/dev/null; then
+      echo "$c"; return 0
+    fi
+  done
+  # try uv-managed python
+  if command -v uv >/dev/null 2>&1; then
+    local p
+    p="$(uv python find 3.12 2>/dev/null || true)"
+    if [[ -n "$p" && -x "$p" ]]; then echo "$p"; return 0; fi
+  fi
+  return 1
 }
 
-PYTHON_BIN=""
-
-# Try common candidates already on PATH
-for cand in python3.12 python3.11 python3.10 python3.13 python3; do
-  if is_good_python "$cand"; then PYTHON_BIN="$cand"; break; fi
-done
-
-# If nothing good found, try `uv` (works even with only python 3.14 installed)
-if [[ -z "$PYTHON_BIN" ]]; then
-  warn "no Python 3.10–3.13 on system → installing uv (auto-manages Python)"
-  if ! command -v uv >/dev/null 2>&1; then
-    if command -v curl >/dev/null 2>&1; then
-      curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1 || true
-      export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+ensure_env() {
+  section "Environment"
+  local PY
+  if ! PY="$(find_python)"; then
+    warn "no Python 3.10–3.13 → installing uv"
+    curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1 || true
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    if command -v uv >/dev/null 2>&1; then
+      uv python install 3.12 >/dev/null 2>&1 || true
+      PY="$(uv python find 3.12 2>/dev/null || true)"
     fi
+    [[ -z "$PY" ]] && { err "cannot get Python 3.10–3.13"; exit 1; }
   fi
-  if command -v uv >/dev/null 2>&1; then
-    ok "uv installed → $(uv --version)"
-    # uv can install a managed Python 3.12
-    if uv python install 3.12 >/dev/null 2>&1; then
-      UV_PY="$(uv python find 3.12 2>/dev/null || true)"
-      if [[ -n "$UV_PY" ]] && is_good_python "$UV_PY"; then
-        PYTHON_BIN="$UV_PY"
-        ok "downloaded Python 3.12 via uv → $PYTHON_BIN"
-      fi
-    fi
+  ok "python → $PY"
+
+  # rebuild venv if broken or missing packages
+  local rebuild=0
+  [[ -d "$VENV" ]] || rebuild=1
+  [[ -x "$VENV/bin/python" ]] || rebuild=1
+  if (( !rebuild )); then
+    "$VENV/bin/python" -c 'import fastapi,uvicorn,httpx,pydantic,rich,questionary' 2>/dev/null || rebuild=1
+  fi
+  if (( rebuild )); then
+    section "Installing packages"
+    rm -rf "$VENV"; mkdir -p "$APP_DIR"
+    "$PY" -m venv "$VENV"
+    "$VENV/bin/pip" install -q --upgrade pip --timeout 10 --retries 1 2>/dev/null || true
+
+    # mirror fallback
+    local mirrors=(
+      "https://pypi.org/simple"
+      "https://mirror-pypi.runflare.com/simple"
+      "https://mirrors.aliyun.com/pypi/simple"
+    )
+    local chosen=""
+    for m in "${mirrors[@]}"; do
+      if timeout 6 curl -sSI -o /dev/null "$m/" 2>/dev/null; then chosen="$m"; break; fi
+    done
+    [[ -z "$chosen" ]] && { err "no PyPI mirror reachable — fix DNS/internet"; exit 1; }
+    ok "using index: $chosen"
+
+    local host
+    host="$(echo "$chosen" | awk -F/ '{print $3}')"
+    "$VENV/bin/pip" install \
+      --index-url "$chosen" --trusted-host "$host" \
+      --timeout 20 --retries 3 \
+      fastapi "uvicorn[standard]" httpx pydantic rich questionary
+    ok "packages installed"
   else
-    warn "uv install failed"
+    ok "venv ready"
   fi
-fi
+}
 
-# Last resort: pyenv
-if [[ -z "$PYTHON_BIN" ]]; then
-  warn "trying pyenv to build Python 3.12 (this can take several minutes)"
-  if ! command -v pyenv >/dev/null 2>&1; then
-    curl -LsSf https://pyenv.run | bash >/dev/null 2>&1 || true
-    export PYENV_ROOT="$HOME/.pyenv"
-    export PATH="$PYENV_ROOT/bin:$PATH"
-  fi
-  if command -v pyenv >/dev/null 2>&1; then
-    eval "$(pyenv init -)" 2>/dev/null || true
-    if pyenv install -s 3.12.7 >/dev/null 2>&1; then
-      PYENV_PY="$PYENV_ROOT/versions/3.12.7/bin/python"
-      if [[ -x "$PYENV_PY" ]] && is_good_python "$PYENV_PY"; then
-        PYTHON_BIN="$PYENV_PY"
-        ok "built Python 3.12 via pyenv"
-      fi
-    fi
-  fi
-fi
-
-if [[ -z "$PYTHON_BIN" ]]; then
-  err "Could not obtain Python 3.10–3.13 automatically."
-  echo
-  warn "Fix it manually with one of these:"
-  printf '    %s1)%s Install uv then re-run:\n' "$BD" "$RS"
-  printf '         curl -LsSf https://astral.sh/uv/install.sh | sh\n' >&2
-  printf '    %s2)%s apt install build-essential zlib1g-dev libssl-dev \\\n' "$BD" "$RS"
-  printf '         libffi-dev libbz2-dev libreadline-dev libsqlite3-dev \\\n' >&2
-  printf '         liblzma-dev libncursesw5-dev tk-dev\n' >&2
-  printf '         then install pyenv and run: pyenv install 3.12.7\n' >&2
-  exit 1
-fi
-ok "python → $PYTHON_BIN  ($("$PYTHON_BIN" --version 2>&1))"
-
-# ============================================================
-#  Step 2 — venv (rebuild if broken or incompatible)
-# ============================================================
-needs_rebuild=0
-if [[ ! -d "$VENV" ]]; then
-  needs_rebuild=1
-elif [[ ! -x "$VENV/bin/python" ]]; then
-  needs_rebuild=1
-elif ! is_good_python "$VENV/bin/python"; then
-  warn "existing venv uses unsupported python → rebuilding"
-  needs_rebuild=1
-elif ! "$VENV/bin/python" -c 'import uvicorn, fastapi, httpx, pydantic' 2>/dev/null; then
-  warn "existing venv is missing packages → rebuilding"
-  needs_rebuild=1
-fi
-
-if (( needs_rebuild )); then
-  section "Setting up virtualenv"
-  rm -rf "$VENV"
-  mkdir -p "$APP_DIR"
-  "$PYTHON_BIN" -m venv "$VENV"
-  "$VENV/bin/pip" install --upgrade pip
-
-  echo "  ${DM}installing fastapi uvicorn httpx pydantic …${RS}"
-  if ! "$VENV/bin/pip" install fastapi "uvicorn[standard]" httpx pydantic; then
-    err "pip install failed"
-    exit 1
-  fi
-  ok "dependencies installed"
-else
-  ok "virtualenv ready"
-fi
-
-# ============================================================
-#  Step 3 — API key
-# ============================================================
-if [[ -z "${DEEPSEEK_API_KEY:-}" && -f "$APP_DIR/.env" ]]; then
-  set -o allexport; . "$APP_DIR/.env"; set +o allexport
-fi
-if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+ensure_key() {
   section "API key"
-  warn "DEEPSEEK_API_KEY not set"
-  read -r -p "  paste your key: " DEEPSEEK_API_KEY
-  [[ -z "$DEEPSEEK_API_KEY" ]] && { err "required"; exit 1; }
-  printf 'DEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" > "$APP_DIR/.env"
-  chmod 600 "$APP_DIR/.env"
-  ok "saved to $APP_DIR/.env"
-else
-  ok "API key loaded"
-fi
+  [[ -f "$APP_DIR/.env" ]] && { set -o allexport; . "$APP_DIR/.env"; set +o allexport; }
+  if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+    warn "DEEPSEEK_API_KEY not set"
+    read -r -p "  paste your DeepSeek key (sk-...): " DEEPSEEK_API_KEY
+    [[ -z "$DEEPSEEK_API_KEY" ]] && { err "required"; exit 1; }
+    printf 'DEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" > "$APP_DIR/.env"
+    chmod 600 "$APP_DIR/.env"
+    ok "saved to $APP_DIR/.env"
+  else
+    ok "key loaded"
+  fi
+  export DEEPSEEK_API_KEY
+}
 
 # ============================================================
-#  Step 4 — write backend
+#  TERMINAL CHAT (Rich + questionary)
 # ============================================================
-section "Writing backend"
+write_tui() {
+  cat > "$APP_DIR/tui.py" <<'PYEOF'
+"""Terminal chat client for DeepSeek with Rich."""
+import json
+import os
+import sys
+from pathlib import Path
 
-cat > "$PY_APP" <<'PYEOF'
-"""AI Platform — DeepSeek Chat + Agent (FastAPI + single-page UI)."""
+import httpx
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.rule import Rule
+
+API_KEY = os.environ["DEEPSEEK_API_KEY"]
+BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+
+console = Console()
+
+
+def stream_reply(messages):
+    """Yield chunks from DeepSeek, print inline. Returns full text."""
+    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+    payload = {"model": MODEL, "messages": messages, "stream": True}
+    full = []
+    console.print(f"[bold cyan]AI ▸[/] ", end="")
+    try:
+        with httpx.Client(timeout=120) as client:
+            with client.stream("POST", f"{BASE_URL}/chat/completions",
+                               headers=headers, json=payload) as r:
+                if r.status_code >= 400:
+                    body = r.read().decode(errors="replace")
+                    console.print(f"[red]\n[!] HTTP {r.status_code}: {body}[/]")
+                    return ""
+                for line in r.iter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+                    delta = obj.get("choices", [{}])[0].get("delta", {})
+                    chunk = delta.get("content") or ""
+                    if chunk:
+                        full.append(chunk)
+                        console.print(chunk, end="", style="green")
+        console.print()
+        return "".join(full)
+    except httpx.RequestError as e:
+        console.print(f"[red]\n[!] network error: {e}[/]")
+        return ""
+
+
+def banner():
+    console.print(Panel.fit(
+        "[bold bright_blue]AI Runner · Terminal[/]\n"
+        "[dim]DeepSeek Chat · type /help for commands[/]",
+        border_style="blue",
+    ))
+
+
+def help_text():
+    console.print(Panel(
+        "[cyan]/new[/]     start a new conversation\n"
+        "[cyan]/help[/]    this message\n"
+        "[cyan]/model[/]   show model\n"
+        "[cyan]/clear[/]   clear screen\n"
+        "[cyan]/exit[/]    quit",
+        title="commands", border_style="blue",
+    ))
+
+
+def main():
+    banner()
+    history: list[dict] = []
+    try:
+        while True:
+            try:
+                text = Prompt.ask("[bold blue]you ▸[/]").strip()
+            except (EOFError, KeyboardInterrupt):
+                console.print("\n[dim]bye[/]")
+                return
+            if not text:
+                continue
+            if text.startswith("/"):
+                cmd = text.lower()
+                if cmd in ("/exit", "/quit"):
+                    return
+                if cmd == "/help":
+                    help_text(); continue
+                if cmd == "/clear":
+                    console.clear(); banner(); continue
+                if cmd == "/model":
+                    console.print(f"[cyan]model:[/] {MODEL}"); continue
+                if cmd == "/new":
+                    history.clear(); console.print("[dim]new conversation[/]"); continue
+                console.print("[red]unknown command[/]"); continue
+
+            history.append({"role": "user", "content": text})
+            answer = stream_reply(history)
+            if answer:
+                history.append({"role": "assistant", "content": answer})
+            else:
+                # remove failed turn so history stays clean
+                history.pop()
+                console.print("[dim]reply failed — try again[/]")
+            console.print(Rule(style="bright_black"))
+    except KeyboardInterrupt:
+        console.print("\n[dim]bye[/]")
+
+
+if __name__ == "__main__":
+    main()
+PYEOF
+}
+
+# ============================================================
+#  WEB APP (FastAPI + single HTML)
+# ============================================================
+write_web() {
+  cat > "$APP_DIR/app.py" <<'PYEOF'
+"""AI Runner — DeepSeek Chat + Agent (FastAPI backend + single HTML UI)."""
 import json
 import os
 import sqlite3
@@ -214,16 +298,16 @@ def init_db() -> None:
         c.executescript(
             """
             CREATE TABLE IF NOT EXISTS conversations (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                title      TEXT NOT NULL DEFAULT 'New chat',
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL DEFAULT 'New chat',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS messages (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 conversation_id INTEGER NOT NULL,
-                role            TEXT NOT NULL,
-                content         TEXT NOT NULL,
-                created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             );
             """
@@ -231,41 +315,25 @@ def init_db() -> None:
 
 
 TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_current_time",
-            "description": "Return current UTC date/time in ISO format.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "calculate",
-            "description": "Evaluate a simple arithmetic expression.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "expression": {"type": "string", "description": "e.g. '2+3*4'"}
-                },
-                "required": ["expression"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_files",
-            "description": "List files in the user's home directory.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "subdir": {"type": "string", "description": "optional subfolder"}
-                },
-            },
-        },
-    },
+    {"type": "function", "function": {
+        "name": "get_current_time",
+        "description": "Return current UTC date/time in ISO format.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "calculate",
+        "description": "Evaluate a simple arithmetic expression.",
+        "parameters": {"type": "object", "properties": {
+            "expression": {"type": "string", "description": "e.g. '2+3*4'"}
+        }, "required": ["expression"]},
+    }},
+    {"type": "function", "function": {
+        "name": "list_files",
+        "description": "List files in the user's home directory.",
+        "parameters": {"type": "object", "properties": {
+            "subdir": {"type": "string", "description": "optional subfolder"}
+        }},
+    }},
 ]
 
 
@@ -278,7 +346,7 @@ def tool_calculate(a: dict) -> str:
     if not expr or any(ch not in "0123456789+-*/(). %" for ch in expr):
         return f"Error: invalid expression {expr!r}"
     try:
-        return str(eval(expr, {"__builtins__": {}}, {}))  # noqa: S307
+        return str(eval(expr, {"__builtins__": {}}, {}))  # noqa
     except Exception as e:
         return f"Error: {e}"
 
@@ -306,7 +374,6 @@ async def deepseek_chat(messages, tools=None, stream=False):
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
-
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
     client = httpx.AsyncClient(timeout=120)
 
@@ -315,6 +382,10 @@ async def deepseek_chat(messages, tools=None, stream=False):
             async with client.stream(
                 "POST", f"{BASE_URL}/chat/completions", headers=headers, json=payload
             ) as r:
+                if r.status_code >= 400:
+                    body = (await r.aread()).decode(errors="replace")
+                    yield {"__error__": f"HTTP {r.status_code}: {body}"}
+                    await client.aclose(); return
                 async for line in r.aiter_lines():
                     if not line or not line.startswith("data:"):
                         continue
@@ -327,13 +398,14 @@ async def deepseek_chat(messages, tools=None, stream=False):
                         continue
                     delta = obj["choices"][0].get("delta", {})
                     if (chunk := delta.get("content")):
-                        yield chunk
+                        yield {"text": chunk}
             await client.aclose()
         return gen()
 
     try:
         r = await client.post(f"{BASE_URL}/chat/completions", headers=headers, json=payload)
-        r.raise_for_status()
+        if r.status_code >= 400:
+            return {"__error__": f"HTTP {r.status_code}: {r.text}"}
         return r.json()
     finally:
         await client.aclose()
@@ -361,17 +433,8 @@ def _sse(obj: dict) -> str:
 @app.get("/api/conversations")
 def list_convs():
     with db() as c:
-        rows = c.execute(
-            "SELECT id, title, created_at FROM conversations ORDER BY id DESC"
-        ).fetchall()
+        rows = c.execute("SELECT id,title,created_at FROM conversations ORDER BY id DESC").fetchall()
     return [dict(r) for r in rows]
-
-
-@app.post("/api/conversations")
-def new_conv():
-    with db() as c:
-        cur = c.execute("INSERT INTO conversations (title) VALUES ('New chat')")
-    return {"id": cur.lastrowid, "title": "New chat"}
 
 
 @app.delete("/api/conversations/{cid}")
@@ -385,9 +448,8 @@ def del_conv(cid: int):
 def get_msgs(cid: int):
     with db() as c:
         rows = c.execute(
-            "SELECT id, role, content, created_at FROM messages "
-            "WHERE conversation_id=? ORDER BY id",
-            (cid,),
+            "SELECT id,role,content,created_at FROM messages "
+            "WHERE conversation_id=? ORDER BY id", (cid,)
         ).fetchall()
     return [dict(r) for r in rows]
 
@@ -401,24 +463,17 @@ async def chat(req: ChatReq):
     cid = req.conversation_id
     with db() as c:
         if cid is None:
-            cur = c.execute(
-                "INSERT INTO conversations (title) VALUES (?)",
-                (text[:40] or "New chat",),
-            )
+            cur = c.execute("INSERT INTO conversations(title) VALUES(?)",
+                            (text[:40] or "New chat",))
             cid = cur.lastrowid
-        c.execute(
-            "INSERT INTO messages (conversation_id, role, content) VALUES (?,?,?)",
-            (cid, "user", text),
-        )
+        c.execute("INSERT INTO messages(conversation_id,role,content) VALUES(?,?,?)",
+                  (cid, "user", text))
         rows = c.execute(
-            "SELECT role, content FROM messages WHERE conversation_id=? ORDER BY id",
-            (cid,),
+            "SELECT role,content FROM messages WHERE conversation_id=? ORDER BY id",
+            (cid,)
         ).fetchall()
-    history = [
-        {"role": r["role"], "content": r["content"]}
-        for r in rows
-        if r["role"] in ("user", "assistant", "system")
-    ]
+    history = [{"role": r["role"], "content": r["content"]} for r in rows
+               if r["role"] in ("user", "assistant", "system")]
 
     async def streamer():
         try:
@@ -426,14 +481,15 @@ async def chat(req: ChatReq):
                 working = list(history)
                 for _ in range(6):
                     resp = await deepseek_chat(working, tools=TOOLS, stream=False)
+                    if "__error__" in resp:
+                        yield _sse({"error": resp["__error__"]}); return
                     msg = resp["choices"][0]["message"]
                     calls = msg.get("tool_calls") or []
                     if not calls:
                         content = msg.get("content") or ""
                         with db() as c:
                             c.execute(
-                                "INSERT INTO messages (conversation_id, role, content) "
-                                "VALUES (?,?,?)",
+                                "INSERT INTO messages(conversation_id,role,content) VALUES(?,?,?)",
                                 (cid, "assistant", content),
                             )
                         yield _sse({"delta": content, "done": True, "conversation_id": cid})
@@ -446,36 +502,36 @@ async def chat(req: ChatReq):
                         except json.JSONDecodeError:
                             args = {}
                         yield _sse({"tool": name, "args": args})
-                        impl = TOOL_IMPL.get(name)
-                        result = impl(args) if impl else f"Error: unknown tool {name}"
-                        working.append(
-                            {"role": "tool", "tool_call_id": tc["id"], "content": result}
-                        )
+                        result = TOOL_IMPL.get(name, lambda _: "unknown tool")(args)
+                        working.append({"role": "tool", "tool_call_id": tc["id"],
+                                        "content": result})
                         yield _sse({"tool_result": result})
-                yield _sse({"delta": "\n[!] agent stopped: max iterations",
-                            "done": True, "conversation_id": cid})
-                return
+                yield _sse({"delta": "[stopped: max iterations]", "done": True,
+                            "conversation_id": cid}); return
 
             full: list[str] = []
-            async for chunk in await deepseek_chat(history, stream=True):
-                full.append(chunk)
-                yield _sse({"delta": chunk})
+            stream = await deepseek_chat(history, stream=True)
+            async for item in stream:
+                if "__error__" in item:
+                    yield _sse({"error": item["__error__"]}); return
+                full.append(item["text"])
+                yield _sse({"delta": item["text"]})
             answer = "".join(full)
+            if not answer:
+                yield _sse({"error": "empty response from API"}); return
             with db() as c:
-                c.execute(
-                    "INSERT INTO messages (conversation_id, role, content) VALUES (?,?,?)",
-                    (cid, "assistant", answer),
-                )
+                c.execute("INSERT INTO messages(conversation_id,role,content) VALUES(?,?,?)",
+                          (cid, "assistant", answer))
             yield _sse({"done": True, "conversation_id": cid})
-        except Exception as e:  # noqa: BLE001
-            yield _sse({"error": str(e)})
+        except Exception as e:
+            yield _sse({"error": f"{type(e).__name__}: {e}"})
 
     return StreamingResponse(streamer(), media_type="text/event-stream")
 
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": MODEL}
+    return {"ok": True, "model": MODEL, "provider": "deepseek"}
 
 
 HTML = r"""<!doctype html>
@@ -488,7 +544,7 @@ HTML = r"""<!doctype html>
 :root{
   --bg:#0a0f1c; --panel:#0f172a; --panel2:#172033; --line:#1e293b;
   --fg:#e2e8f0; --dim:#94a3b8;
-  --blue:#3b82f6; --blue2:#60a5fa; --cyan:#22d3ee;
+  --blue:#3b82f6; --cyan:#22d3ee;
   --green:#10b981; --red:#ef4444; --amber:#f59e0b;
   --user:#1e3a8a; --bot:#111827;
 }
@@ -500,18 +556,16 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
   display:flex;flex-direction:column}
 #sidebar header{padding:16px;border-bottom:1px solid var(--line);
   display:flex;align-items:center;gap:10px}
-.brand{font-weight:700;font-size:14px;letter-spacing:.4px}
+.brand{font-weight:700;font-size:14px}
 .brand .dot{display:inline-block;width:8px;height:8px;border-radius:50%;
   background:var(--cyan);margin-right:8px;box-shadow:0 0 8px var(--cyan)}
 #newchat{margin:14px;padding:10px;background:linear-gradient(135deg,var(--blue),var(--cyan));
   color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px}
-#newchat:hover{filter:brightness(1.1)}
 #convs{flex:1;overflow-y:auto;padding:0 10px 14px}
 .conv{padding:9px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--dim);
-  display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:2px;
-  transition:background .15s}
-.conv:hover{background:var(--panel2);color:var(--fg)}
-.conv.active{background:var(--panel2);color:var(--fg);box-shadow:inset 3px 0 0 var(--blue)}
+  display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:2px}
+.conv:hover,.conv.active{background:var(--panel2);color:var(--fg)}
+.conv.active{box-shadow:inset 3px 0 0 var(--blue)}
 .conv span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conv .del{opacity:0;color:var(--red);padding:0 4px;font-size:13px}
 .conv:hover .del{opacity:1}
@@ -532,6 +586,7 @@ main{flex:1;display:flex;flex-direction:column;min-width:0}
   white-space:pre-wrap;word-wrap:break-word}
 .user .bubble{background:var(--user)}
 .bot .bubble{background:var(--bot);border:1px solid var(--line)}
+.err .bubble{background:#7f1d1d;border:1px solid var(--red)}
 .tool{max-width:820px;margin:-10px auto 14px;font-size:12px;color:var(--amber);
   padding-left:44px;font-family:ui-monospace,monospace}
 #composer{position:fixed;bottom:0;left:280px;right:0;
@@ -563,7 +618,7 @@ pre{background:#0a0f1c;padding:12px;border-radius:8px;border:1px solid var(--lin
   <main>
     <div id="topbar">
       <div id="title">New chat</div>
-      <label class="toggle"><input type="checkbox" id="agentToggle"> Agent mode</label>
+      <label class="toggle"><input type="checkbox" id="agentToggle"> Agent</label>
     </div>
     <div id="chat"></div>
     <div id="composer">
@@ -572,8 +627,7 @@ pre{background:#0a0f1c;padding:12px;border-radius:8px;border:1px solid var(--lin
           placeholder="Message DeepSeek…  (Enter to send · Shift+Enter newline)"></textarea>
         <button id="send" title="Send">➤</button>
       </div>
-      <div class="hint">DeepSeek · Agent tools: <code>time</code>
-        <code>calculate</code> <code>list_files</code></div>
+      <div class="hint">tools: <code>time</code> <code>calculate</code> <code>list_files</code></div>
     </div>
   </main>
 </div>
@@ -619,9 +673,9 @@ async function openConv(id, title){
   loadConvs(); scrollDown();
 }
 
-function appendMsg(role, content){
+function appendMsg(role, content, cls=''){
   const w = document.createElement('div');
-  w.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
+  w.className = 'msg ' + (role === 'user' ? 'user' : 'bot') + (cls ? ' '+cls : '');
   w.innerHTML = `<div class="avatar">${role==='user'?'U':'AI'}</div>
                  <div class="bubble">${md(content)}</div>`;
   chatEl.appendChild(w);
@@ -633,7 +687,6 @@ function appendTool(text){
   t.className = 'tool'; t.textContent = '🔧 ' + text;
   chatEl.appendChild(t); scrollDown();
 }
-
 const scrollDown = () => chatEl.scrollTop = chatEl.scrollHeight;
 
 async function send(){
@@ -649,7 +702,7 @@ async function send(){
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({conversation_id: currentConv, message: text, agent: agentToggle.checked})
     });
-    if(!r.ok) throw new Error(await r.text());
+    if(!r.ok) throw new Error('HTTP ' + r.status + ': ' + (await r.text()));
     const reader = r.body.getReader(), dec = new TextDecoder();
     let buf = '';
     while(true){
@@ -662,15 +715,21 @@ async function send(){
         const line = chunk.split('\n').find(l => l.startsWith('data: '));
         if(!line) continue;
         const obj = JSON.parse(line.slice(6));
-        if(obj.error)       bubble.textContent = '⚠ ' + obj.error;
-        else if(obj.delta)  { answer += obj.delta; bubble.innerHTML = md(answer); scrollDown(); }
-        else if(obj.tool)         appendTool(`call ${obj.tool} ${JSON.stringify(obj.args)}`);
-        else if(obj.tool_result)  appendTool(obj.tool_result);
-        else if(obj.done && !currentConv) currentConv = obj.conversation_id, loadConvs();
+        if(obj.error){
+          bubble.parentElement.classList.add('err');
+          bubble.textContent = '⚠ ' + obj.error;
+        }
+        else if(obj.delta) { answer += obj.delta; bubble.innerHTML = md(answer); scrollDown(); }
+        else if(obj.tool) appendTool(`call ${obj.tool} ${JSON.stringify(obj.args)}`);
+        else if(obj.tool_result) appendTool(obj.tool_result);
+        else if(obj.done && !currentConv){ currentConv = obj.conversation_id; loadConvs(); }
       }
     }
-    if(!answer) bubble.textContent = '(no content)';
-  }catch(e){ bubble.textContent = '⚠ ' + e.message; }
+    if(!answer && !bubble.textContent.startsWith('⚠')) bubble.textContent = '(no content)';
+  }catch(e){
+    bubble.parentElement.classList.add('err');
+    bubble.textContent = '⚠ ' + e.message;
+  }
   finally{ streaming = false; sendBtn.disabled = false; inputEl.focus(); }
 }
 
@@ -697,26 +756,112 @@ loadConvs(); inputEl.focus();
 def index():
     return HTML
 PYEOF
-
-chmod 600 "$PY_APP"
-ok "backend written to $PY_APP"
+}
 
 # ============================================================
-#  Step 5 — final sanity check + launch
+#  MENU
 # ============================================================
-section "Verifying installation"
-[[ -x "$VENV/bin/uvicorn" ]] || { err "uvicorn binary missing"; exit 1; }
-"$VENV/bin/python" -c 'import uvicorn, fastapi, httpx, pydantic' 2>/dev/null \
-  || { err "python packages not importable"; exit 1; }
-ok "all packages importable"
+show_menu() {
+  echo
+  section "Choose mode"
+  cat <<EOF
 
-section "Starting server"
-LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-printf '%s  →%s http://localhost:%s%s\n' "$B4" "$RS" "$PORT" "$RS"
-[[ -n "$LAN_IP" ]] && printf '%s  →%s http://%s:%s%s   (LAN)%s\n' \
-  "$B4" "$RS" "$LAN_IP" "$PORT" "$DM" "$RS"
-printf '%s  stop with Ctrl+C%s\n\n' "$DM" "$RS"
+   ${B4}1${RS})  ${BD}web${RS}    → browser UI at http://localhost:8080
+   ${B4}2${RS})  ${BD}tui${RS}    → terminal chat (Rich)
+   ${B4}3${RS})  ${BD}ask${RS}    → one-shot: ask "prompt"
+   ${B4}4${RS})  ${BD}health${RS} → ping DeepSeek API
+   ${B4}q${RS})  quit
 
-export DEEPSEEK_API_KEY
-cd "$APP_DIR"
-exec "$VENV/bin/uvicorn" app:app --host 0.0.0.0 --port "$PORT"
+EOF
+}
+
+cmd_web() {
+  local port="${1:-8080}"
+  section "Starting web server on :$port"
+  local ip
+  ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  printf '%s  →%s http://localhost:%s\n' "$B4" "$RS" "$port"
+  [[ -n "$ip" ]] && printf '%s  →%s http://%s:%s  (LAN)\n' "$B4" "$RS" "$ip" "$port"
+  printf '%s  Ctrl+C to stop%s\n\n' "$DM" "$RS"
+  cd "$APP_DIR"
+  exec "$VENV/bin/uvicorn" app:app --host 0.0.0.0 --port "$port"
+}
+
+cmd_tui() {
+  export DEEPSEEK_API_KEY
+  exec "$VENV/bin/python" "$APP_DIR/tui.py"
+}
+
+cmd_ask() {
+  local prompt="$*"
+  [[ -z "$prompt" ]] && { err "empty prompt"; exit 1; }
+  "$VENV/bin/python" - "$prompt" <<'PY'
+import json, os, sys
+import httpx
+p = sys.argv[1]
+h = {"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
+     "Content-Type": "application/json"}
+r = httpx.post(
+    "https://api.deepseek.com/chat/completions",
+    headers=h,
+    json={"model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+          "messages": [{"role": "user", "content": p}]},
+    timeout=60,
+)
+if r.status_code >= 400:
+    print(f"HTTP {r.status_code}: {r.text}", file=sys.stderr); sys.exit(1)
+data = r.json()
+print(data["choices"][0]["message"]["content"])
+PY
+}
+
+cmd_health() {
+  "$VENV/bin/python" - <<'PY'
+import os, httpx
+h = {"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
+     "Content-Type": "application/json"}
+try:
+    r = httpx.post(
+        "https://api.deepseek.com/chat/completions", headers=h,
+        json={"model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+              "messages": [{"role": "user", "content": "say OK"}],
+              "max_tokens": 5},
+        timeout=30,
+    )
+    print(f"status: {r.status_code}")
+    print(f"body:   {r.text[:300]}")
+except Exception as e:
+    print(f"error:  {e}")
+PY
+}
+
+# ============================================================
+#  MAIN
+# ============================================================
+print_banner
+ensure_env
+ensure_key
+write_tui
+write_web
+
+case "${1:-menu}" in
+  web)   shift; cmd_web "$@" ;;
+  tui)   cmd_tui ;;
+  ask)   shift; cmd_ask "$@" ;;
+  health) cmd_health ;;
+  menu|"")
+    while true; do
+      show_menu
+      read -r -p "  > " choice
+      case "$choice" in
+        1) cmd_web 8080 ;;
+        2) cmd_tui ;;
+        3) read -r -p "  prompt: " p; cmd_ask "$p" ;;
+        4) cmd_health ;;
+        q|Q) exit 0 ;;
+        *) warn "unknown choice" ;;
+      esac
+    done
+    ;;
+  *)  err "unknown mode: $1"; echo "usage: $0 [web|tui|ask|health|menu]"; exit 1 ;;
+esac
