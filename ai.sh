@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # ============================================================================
-#   AyhanX-Agent · premium terminal client for DeepSeek
+#   AyhanX-Agent · premium terminal client for DeepSeek & OpenRouter
 #   Repository:  https://github.com/AyhanMansur/AyhanX-Agent
-#   Version:     3.2.0
+#   Version:     3.3.0
 #
 #   Usage:
-#     ./ai.sh                 chat (default)
-#     ./ai.sh ask "prompt"    one-shot answer
-#     ./ai.sh health          check the API connection
-#     ./ai.sh config          show file locations
-#     ./ai.sh version         print version
+#     ./ai.sh                          chat (auto-detects provider from key)
+#     ./ai.sh --provider openrouter    force OpenRouter
+#     ./ai.sh --provider deepseek      force DeepSeek
+#     ./ai.sh ask "prompt"             one-shot answer
+#     ./ai.sh health                   check the API connection
+#     ./ai.sh config                   show file locations
+#     ./ai.sh version                  print version
 # ============================================================================
 set -euo pipefail
 
-VERSION="3.2.0"
+VERSION="3.3.0"
 REPO_URL="https://github.com/AyhanMansur/AyhanX-Agent"
 APP_DIR="${HOME}/.ai_platform"
 VENV="${APP_DIR}/.venv"
@@ -23,19 +25,15 @@ ENV_FILE="${APP_DIR}/.env"
 HISTORY_FILE="${APP_DIR}/history.txt"
 CHATS_DIR="${APP_DIR}/chats"
 LOG_FILE="${APP_DIR}/install.log"
+PROVIDER_FILE="${APP_DIR}/provider"
 export AI_RUNNER_VERSION="$VERSION"
 
-# ---------- palette (256-colour; NO_COLOR and pipes get plain text) ----------
+# ---------- palette ----------
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   E=$'\e'
-  V1="${E}[38;5;44m"    # turquoise
-  V2="${E}[38;5;30m"    # deep turquoise
-  C1="${E}[38;5;51m"    # bright cyan
-  PK="${E}[38;5;213m"   # pink
-  GD="${E}[38;5;221m"   # gold
-  MT="${E}[38;5;245m"   # muted grey
-  OK="${E}[38;5;84m"    # mint
-  ER="${E}[38;5;203m"   # red
+  V1="${E}[38;5;44m"; V2="${E}[38;5;30m"; C1="${E}[38;5;51m"
+  PK="${E}[38;5;213m"; GD="${E}[38;5;221m"; MT="${E}[38;5;245m"
+  OK="${E}[38;5;84m"; ER="${E}[38;5;203m"
   BD="${E}[1m"; DM="${E}[2m"; RS="${E}[0m"
 else
   E= V1= V2= C1= PK= GD= MT= OK= ER= BD= DM= RS=
@@ -48,6 +46,38 @@ cleanup() {
   exit "$code"
 }
 trap cleanup EXIT INT TERM
+
+# ============================================================================
+#  PROVIDER HELPERS
+# ============================================================================
+provider_of_key() {
+  case "${1:-}" in
+    sk-or-*) echo "openrouter" ;;
+    sk-*)    echo "deepseek" ;;
+    *)       echo "" ;;
+  esac
+}
+
+provider_url() {
+  case "$1" in
+    openrouter) echo "https://openrouter.ai/api/v1" ;;
+    *)          echo "https://api.deepseek.com" ;;
+  esac
+}
+
+provider_default_model() {
+  case "$1" in
+    openrouter) echo "deepseek/deepseek-chat" ;;
+    *)          echo "deepseek-chat" ;;
+  esac
+}
+
+provider_label() {
+  case "$1" in
+    openrouter) echo "OpenRouter" ;;
+    *)          echo "DeepSeek" ;;
+  esac
+}
 
 # ============================================================================
 #  UI PRIMITIVES
@@ -73,7 +103,6 @@ warn()    { printf '  %s!%s %s\n' "$GD" "$RS" "$*"; }
 err()     { printf '  %s✘%s %s\n' "$ER" "$RS" "$*" >&2; }
 info()    { printf '  %s·%s %s%s%s\n' "$MT" "$RS" "$MT" "$*" "$RS"; }
 
-# spin "message" command args…  → animated spinner, output goes to the log
 spin() {
   local msg="$1"; shift
   local frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) i=0 rc=0 pid
@@ -111,7 +140,6 @@ print_logo() {
 '                  ░██                                                                       ░██                                 '
 '            ░███████                                                                  ░███████                                  '
   )
-  # deep teal → turquoise → bright cyan, applied per column
   local ramp=(30 36 37 43 44 80 87)
   local max=0 l
   for l in "${lines[@]}"; do
@@ -133,8 +161,9 @@ print_logo() {
 }
 
 print_tagline() {
-  printf '  %s◆%s %s%sAyhanX-Agent%s  %s· DeepSeek terminal · v%s%s\n' \
-    "$V1" "$RS" "$BD" "$V1" "$RS" "$MT" "$VERSION" "$RS"
+  local provider="${AYHANX_PROVIDER:-deepseek}"
+  printf '  %s◆%s %s%sAyhanX-Agent%s  %s· %s · v%s%s\n' \
+    "$V1" "$RS" "$BD" "$V1" "$RS" "$MT" "$(provider_label "$provider")" "$VERSION" "$RS"
   rule
 }
 
@@ -229,25 +258,58 @@ ensure_key() {
   if [[ -f "$ENV_FILE" ]]; then
     set -o allexport; . "$ENV_FILE"; set +o allexport
   fi
+
   if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
-    warn "no DeepSeek key found"
-    printf '  %s›%s paste your key %s(sk-…, hidden)%s: ' "$PK" "$RS" "$MT" "$RS"
+    warn "no API key found"
+    printf '  %s›%s paste your key %s(sk-… for DeepSeek · sk-or-… for OpenRouter)%s: ' \
+      "$PK" "$RS" "$MT" "$RS"
     read -r -s DEEPSEEK_API_KEY || true
     echo
     if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then err "a key is required"; exit 1; fi
     printf 'DEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" > "$ENV_FILE"
     chmod 600 "$ENV_FILE"
-    ok "key saved (${MT}$ENV_FILE${RS})"
+    ok "key saved"
   else
     ok "key loaded"
   fi
-  export DEEPSEEK_API_KEY
-  export DEEPSEEK_BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
-  export DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-chat}"
+
+  # ---- provider resolution ----
+  #   1. AYHANX_PROVIDER env (explicit override)
+  #   2. DEEPSEEK_BASE_URL env (infer from URL)
+  #   3. key prefix (most reliable)
+  #   4. saved PROVIDER_FILE
+  #   5. default: deepseek
+  local provider=""
+  if [[ -n "${AYHANX_PROVIDER:-}" ]]; then
+    provider="$AYHANX_PROVIDER"
+  elif [[ -n "${DEEPSEEK_BASE_URL:-}" ]]; then
+    case "$DEEPSEEK_BASE_URL" in
+      *openrouter*) provider="openrouter" ;;
+      *deepseek*)   provider="deepseek" ;;
+    esac
+  fi
+  if [[ -z "$provider" ]]; then
+    provider="$(provider_of_key "$DEEPSEEK_API_KEY")"
+  fi
+  if [[ -z "$provider" && -f "$PROVIDER_FILE" ]]; then
+    provider="$(cat "$PROVIDER_FILE" 2>/dev/null || echo "")"
+  fi
+  if [[ -z "$provider" ]]; then
+    provider="deepseek"
+  fi
+
+  printf '%s\n' "$provider" > "$PROVIDER_FILE"
+  export AYHANX_PROVIDER="$provider"
+  export DEEPSEEK_BASE_URL="${DEEPSEEK_BASE_URL:-$(provider_url "$provider")}"
+  export DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-$(provider_default_model "$provider")}"
+
+  ok "provider → $(provider_label "$provider")"
+  info "endpoint → $DEEPSEEK_BASE_URL"
+  info "model    → $DEEPSEEK_MODEL"
 }
 
 # ============================================================================
-#  GENERATE: runner/tools.py   (unchanged behaviour)
+#  GENERATE: runner/tools.py  (unchanged)
 # ============================================================================
 write_tools() {
   mkdir -p "$RUNNER_DIR"
@@ -408,11 +470,11 @@ PYEOF
 }
 
 # ============================================================================
-#  GENERATE: runner/tui.py   (premium terminal UI)
+#  GENERATE: runner/tui.py  (now provider-aware)
 # ============================================================================
 write_tui() {
   cat > "$RUNNER_DIR/tui.py" <<'PYEOF'
-"""AyhanX-Agent — premium terminal chat for DeepSeek."""
+"""AyhanX-Agent — premium terminal chat for DeepSeek & OpenRouter."""
 import html
 import json
 import os
@@ -439,14 +501,33 @@ from rich.text import Text
 
 from .tools import TOOL_IMPLS, TOOL_SPECS
 
-VERSION = os.environ.get("AI_RUNNER_VERSION", "3.2.0")
+VERSION = os.environ.get("AI_RUNNER_VERSION", "3.3.0")
 APP_DIR = Path(os.environ.get("APP_DIR", Path.home() / ".ai_platform"))
 CONFIG_PATH = APP_DIR / "config.json"
 HISTORY_PATH = APP_DIR / "history.txt"
 CHATS_DIR = APP_DIR / "chats"
 CHATS_DIR.mkdir(parents=True, exist_ok=True)
 
-MODELS = ["deepseek-chat", "deepseek-reasoner"]
+PROVIDER = os.environ.get("AYHANX_PROVIDER", "deepseek")
+PROVIDER_LABEL = {"deepseek": "DeepSeek", "openrouter": "OpenRouter"}.get(
+    PROVIDER, PROVIDER)
+
+PROVIDER_MODELS = {
+    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    "openrouter": [
+        "deepseek/deepseek-chat",
+        "deepseek/deepseek-chat-v3-0324:free",
+        "deepseek/deepseek-r1:free",
+        "deepseek/deepseek-r1-distill-llama-70b:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-exp:free",
+        "qwen/qwen-2.5-72b-instruct:free",
+        "mistralai/mistral-small-24b-instruct-2501:free",
+        "microsoft/phi-4:free",
+        "anthropic/claude-3.5-sonnet",
+    ],
+}
+MODELS = PROVIDER_MODELS.get(PROVIDER, PROVIDER_MODELS["deepseek"])
 START = os.environ.get("AYHANX_START", "new")
 
 
@@ -458,10 +539,10 @@ def save_last(conv) -> None:
     if conv.messages:
         (CHATS_DIR / "last.json").write_text(json.dumps(conv.messages, indent=2))
 
-# ---- palette ---------------------------------------------------------------
-VIOLET = "#40e0d0"        # turquoise (accent)
-VIOLET_DEEP = "#0f9d9a"   # deep turquoise (borders)
-CYAN = "#5eead4"          # soft turquoise (labels)
+
+VIOLET = "#40e0d0"
+VIOLET_DEEP = "#0f9d9a"
+CYAN = "#5eead4"
 GOLD = "#fbbf24"
 MINT = "#34d399"
 RED = "#f87171"
@@ -472,7 +553,6 @@ TEXT = "#e2e8f0"
 console = Console(highlight=False)
 
 
-# ---- config / conversation -------------------------------------------------
 @dataclass
 class Config:
     model: str = "deepseek-chat"
@@ -533,23 +613,33 @@ class Conversation:
         return [m for m in self.messages if m.get("content", "").strip()]
 
 
-# ---- API client ------------------------------------------------------------
 class DeepSeekClient:
-    def __init__(self, api_key: str, base_url: str, model: str):
+    def __init__(self, api_key: str, base_url: str, model: str,
+                 provider: str = "deepseek"):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self.provider = provider
 
     def _headers(self) -> dict:
-        return {"Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"}
+        h = {"Authorization": f"Bearer {self.api_key}",
+             "Content-Type": "application/json"}
+        if self.provider == "openrouter":
+            h["HTTP-Referer"] = "https://github.com/AyhanMansur/AyhanX-Agent"
+            h["X-Title"] = "AyhanX-Agent"
+        return h
 
     def _hint(self, status: int) -> str:
-        return {
-            401: "invalid API key — platform.deepseek.com/api_keys",
-            402: "insufficient balance — platform.deepseek.com/top_up",
+        base = {
+            401: "invalid API key",
+            402: "insufficient balance",
             429: "rate limited — wait a few seconds",
         }.get(status, "")
+        if not base:
+            return ""
+        if self.provider == "openrouter":
+            return base + " — openrouter.ai/keys"
+        return base + " — platform.deepseek.com/api_keys"
 
     def _error(self, status: int, body: str) -> str:
         msg = body
@@ -635,10 +725,16 @@ def mode_chip(agent: bool) -> Text:
     return Text(" CHAT ", style=f"bold #04221a on {MINT}")
 
 
+def provider_chip() -> Text:
+    return Text(f" {PROVIDER_LABEL} ", style=f"bold #0a0f1c on {CYAN}")
+
+
 def show_header(cfg: Config) -> None:
     left = Text.assemble(("◆ ", VIOLET), gradient("AyhanX-Agent"),
                          ("   ", ""), (f"v{VERSION}", MUTED))
-    right = Text.assemble(model_chip(cfg.model), ("  ", ""), mode_chip(cfg.agent_mode))
+    right = Text.assemble(provider_chip(), ("  ", ""),
+                          model_chip(cfg.model), ("  ", ""),
+                          mode_chip(cfg.agent_mode))
     grid = Table.grid(expand=True)
     grid.add_column(ratio=1)
     grid.add_column(justify="right")
@@ -661,7 +757,8 @@ def error_panel(msg: str) -> Panel:
 
 
 def assistant_panel(text: str, thinking: bool = False) -> Panel:
-    title = Text.assemble(("◆ ", VIOLET), ("DeepSeek", f"bold {VIOLET}"),
+    title = Text.assemble(("◆ ", VIOLET),
+                          (PROVIDER_LABEL, f"bold {VIOLET}"),
                           ("  thinking…" if thinking else "", MUTED))
     return Panel(Markdown(text or ""), title=title, title_align="left",
                  box=box.ROUNDED, border_style=VIOLET_DEEP, padding=(0, 2))
@@ -720,6 +817,7 @@ def info_panel(cfg: Config, conv: Conversation) -> None:
     t = Table.grid(padding=(0, 3))
     t.add_column(style=f"bold {VIOLET}", no_wrap=True)
     t.add_column(style=TEXT)
+    t.add_row("provider", PROVIDER_LABEL)
     t.add_row("model", cfg.model)
     t.add_row("mode", "agent" if cfg.agent_mode else "chat")
     t.add_row("system prompt", "set" if cfg.system_prompt else "none")
@@ -795,7 +893,8 @@ def toolbar(cfg: Config, conv: Conversation) -> HTML:
     mode = ('<style fg="#fbbf24"><b>AGENT</b></style>' if cfg.agent_mode
             else '<style fg="#34d399"><b>CHAT</b></style>')
     return HTML(
-        f' <style fg="#a78bfa"><b>{html.escape(cfg.model)}</b></style>'
+        f' <style fg="#5eead4"><b>{html.escape(PROVIDER_LABEL)}</b></style>'
+        f'  ·  <style fg="#a78bfa"><b>{html.escape(cfg.model)}</b></style>'
         f'  ·  {mode}  ·  {len(conv.messages)} msgs'
         f'    <style fg="#64748b">/help · Enter send · Esc+Enter newline · Ctrl+D exit</style>'
     )
@@ -908,8 +1007,11 @@ def main() -> int:
 
     base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     cfg = Config.load()
+    # if this is the first run for this provider, seed the model
     if os.environ.get("DEEPSEEK_MODEL"):
         cfg.model = os.environ["DEEPSEEK_MODEL"]
+    elif cfg.model not in MODELS and cfg.model not in cfg.custom_models:
+        cfg.model = MODELS[0]
 
     conv = Conversation()
     show_header(cfg)
@@ -943,7 +1045,6 @@ def main() -> int:
         if not text:
             continue
 
-        # ---- slash commands -------------------------------------------
         if text.startswith("/"):
             parts = text.split(maxsplit=1)
             cmd = parts[0].lower()
@@ -1030,11 +1131,10 @@ def main() -> int:
                 notice(f"unknown command: {cmd}  (try /help)", RED)
             continue
 
-        # ---- normal message -------------------------------------------
         print_user(text)
         conv.add_user(text)
         conv.trim(cfg.max_context_messages)
-        client = DeepSeekClient(api_key, base_url, cfg.model)
+        client = DeepSeekClient(api_key, base_url, cfg.model, PROVIDER)
 
         try:
             if cfg.agent_mode:
@@ -1068,7 +1168,7 @@ cmd_tui() {
 }
 
 add_model() {
-  printf '  %s›%s new model id %s(e.g. deepseek-chat)%s: ' "$PK" "$RS" "$MT" "$RS"
+  printf '  %s›%s new model id: ' "$PK" "$RS"
   local name=""
   read -r name || true
   name="${name// /}"
@@ -1127,10 +1227,14 @@ cmd_ask() {
 import os, sys
 import httpx
 p = sys.argv[1]
+provider = os.environ.get("AYHANX_PROVIDER", "deepseek")
 base = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
-h = {"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
-     "Content-Type": "application/json"}
-r = httpx.post(f"{base}/chat/completions", headers=h,
+headers = {"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
+           "Content-Type": "application/json"}
+if provider == "openrouter":
+    headers["HTTP-Referer"] = "https://github.com/AyhanMansur/AyhanX-Agent"
+    headers["X-Title"] = "AyhanX-Agent"
+r = httpx.post(f"{base}/chat/completions", headers=headers,
                json={"model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
                      "messages": [{"role": "user", "content": p}]},
                timeout=120)
@@ -1141,7 +1245,8 @@ if r.status_code >= 400:
         msg = r.text
     hints = {401: "invalid key", 402: "no balance", 429: "rate limited"}
     hint = hints.get(r.status_code, "")
-    print(f"HTTP {r.status_code}: {msg}" + (f" ({hint})" if hint else ""), file=sys.stderr)
+    print(f"HTTP {r.status_code}: {msg}" + (f" ({hint})" if hint else ""),
+          file=sys.stderr)
     sys.exit(1)
 print(r.json()["choices"][0]["message"]["content"])
 PY
@@ -1152,15 +1257,20 @@ cmd_health() {
   "$VENV/bin/python" - <<'PY'
 import os
 import httpx
+provider = os.environ.get("AYHANX_PROVIDER", "deepseek")
 base = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
 model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-h = {"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
-     "Content-Type": "application/json"}
+headers = {"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
+           "Content-Type": "application/json"}
+if provider == "openrouter":
+    headers["HTTP-Referer"] = "https://github.com/AyhanMansur/AyhanX-Agent"
+    headers["X-Title"] = "AyhanX-Agent"
 G, R, M, N = "\033[38;5;84m", "\033[38;5;203m", "\033[38;5;245m", "\033[0m"
+print(f"  {M}provider{N}  {provider}")
 print(f"  {M}endpoint{N}  {base}")
 print(f"  {M}model{N}     {model}")
 try:
-    r = httpx.post(f"{base}/chat/completions", headers=h, timeout=30,
+    r = httpx.post(f"{base}/chat/completions", headers=headers, timeout=30,
                    json={"model": model, "max_tokens": 5,
                          "messages": [{"role": "user", "content": "say OK"}]})
     print(f"  {M}status{N}    {r.status_code}")
@@ -1178,8 +1288,10 @@ PY
 
 cmd_config() {
   section "Files"
+  info "provider ${AYHANX_PROVIDER:-deepseek}  (override: AYHANX_PROVIDER=openrouter $0)"
   info "config   $CONFIG_FILE"
   info "env      $ENV_FILE"
+  info "provider $PROVIDER_FILE"
   info "history  $HISTORY_FILE"
   info "chats    $CHATS_DIR"
   info "log      $LOG_FILE"
@@ -1195,6 +1307,7 @@ cmd_version() {
   section "Version"
   info "AyhanX-Agent  $VERSION"
   info "repo       $REPO_URL"
+  info "provider   ${AYHANX_PROVIDER:-deepseek}"
   info "app dir    $APP_DIR"
   if [[ -x "$VENV/bin/python" ]]; then
     info "python     $("$VENV/bin/python" --version 2>&1)"
@@ -1206,6 +1319,18 @@ cmd_version() {
 # ============================================================================
 main() {
   mkdir -p "$APP_DIR"
+
+  # ---- parse --provider flag anywhere before the subcommand ----
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --provider) shift; export AYHANX_PROVIDER="${1:-}"; shift || break ;;
+      --provider=*) export AYHANX_PROVIDER="${1#*=}"; shift ;;
+      --) shift; break ;;
+      ask|health|config|version|chat|tui) break ;;
+      *) break ;;
+    esac
+  done
+
   case "${1:-chat}" in
     ask)
       shift
@@ -1237,7 +1362,7 @@ main() {
       ;;
     *)
       err "unknown mode: $1"
-      info "usage: $0 [chat|ask|health|config|version]"
+      info "usage: $0 [--provider deepseek|openrouter] [chat|ask|health|config|version]"
       exit 1
       ;;
   esac
