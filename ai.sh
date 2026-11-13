@@ -2,7 +2,7 @@
 # ============================================================================
 #   AyhanX-Agent · premium terminal client for cloud & local LLMs
 #   Repository:  https://github.com/AyhanMansur/AyhanX-Agent
-#   Version:     3.5.0
+#   Version:     3.6.0
 #
 #   Usage:
 #     ./ai.sh                          chat (auto-detect provider)
@@ -15,7 +15,7 @@
 # ============================================================================
 set -euo pipefail
 
-VERSION="3.5.0"
+VERSION="3.6.0"
 REPO_URL="https://github.com/AyhanMansur/AyhanX-Agent"
 APP_DIR="${HOME}/.ai_platform"
 VENV="${APP_DIR}/.venv"
@@ -63,6 +63,8 @@ provider_of_key() {
     sk-or-*)  echo "openrouter" ;;
     gsk_*)    echo "groq" ;;
     sk-*)     echo "deepseek" ;;
+    AIza*)    echo "google" ;;
+    AQ.*)     echo "google" ;;
     *)        echo "" ;;
   esac
 }
@@ -71,6 +73,7 @@ provider_url() {
   case "$1" in
     openrouter) echo "https://openrouter.ai/api/v1" ;;
     groq)       echo "https://api.groq.com/openai/v1" ;;
+    google)     echo "https://generativelanguage.googleapis.com/v1beta/openai" ;;
     ollama)     echo "${OLLAMA_URL:-http://localhost:11434/v1}" ;;
     lmstudio)   echo "${LMSTUDIO_URL:-http://localhost:1234/v1}" ;;
     vllm)       echo "${VLLM_URL:-http://localhost:8000/v1}" ;;
@@ -84,6 +87,7 @@ provider_default_model() {
   case "$1" in
     openrouter) echo "deepseek/deepseek-chat" ;;
     groq)       echo "llama-3.3-70b-versatile" ;;
+    google)     echo "gemini-2.0-flash" ;;
     ollama)     echo "qwen2.5:3b" ;;
     lmstudio|vllm|llamacpp|localai) echo "local-model" ;;
     *)          echo "deepseek-chat" ;;
@@ -94,6 +98,7 @@ provider_label() {
   case "$1" in
     openrouter) echo "OpenRouter" ;;
     groq)       echo "Groq" ;;
+    google)     echo "Google AI Studio" ;;
     ollama)     echo "Ollama" ;;
     lmstudio)   echo "LM Studio" ;;
     vllm)       echo "vLLM" ;;
@@ -305,6 +310,7 @@ ensure_key() {
     case "$DEEPSEEK_BASE_URL" in
       *openrouter*)  provider="openrouter" ;;
       *groq*)        provider="groq" ;;
+      *generativelanguage*) provider="google" ;;
       *:11434*)      provider="ollama" ;;
       *:1234*)       provider="lmstudio" ;;
       *:8000*)       provider="vllm" ;;
@@ -489,7 +495,7 @@ PYEOF
 }
 
 # ============================================================================
-#  WRITE: runner/tui.py  (WITH /provider COMMAND)
+#  WRITE: runner/tui.py
 # ============================================================================
 write_tui() {
   cat > "$RUNNER_DIR/tui.py" <<'PYEOF'
@@ -521,7 +527,7 @@ from rich.text import Text
 
 from .tools import TOOL_IMPLS, TOOL_SPECS
 
-VERSION = os.environ.get("AI_RUNNER_VERSION", "3.5.0")
+VERSION = os.environ.get("AI_RUNNER_VERSION", "3.6.0")
 APP_DIR = Path(os.environ.get("APP_DIR", Path.home() / ".ai_platform"))
 CONFIG_PATH = APP_DIR / "config.json"
 HISTORY_PATH = APP_DIR / "history.txt"
@@ -534,14 +540,15 @@ PROVIDER = os.environ.get("AYHANX_PROVIDER", "deepseek")
 LOCAL_PROVIDERS = {"ollama", "lmstudio", "vllm", "llamacpp", "localai"}
 
 PROVIDER_DEFAULTS = {
-    "deepseek":   {"url": "https://api.deepseek.com",       "model": "deepseek-chat"},
-    "openrouter": {"url": "https://openrouter.ai/api/v1",   "model": "deepseek/deepseek-chat"},
-    "groq":       {"url": "https://api.groq.com/openai/v1", "model": "llama-3.3-70b-versatile"},
-    "ollama":     {"url": "http://localhost:11434/v1",      "model": "qwen2.5:3b"},
-    "lmstudio":   {"url": "http://localhost:1234/v1",       "model": "local-model"},
-    "vllm":       {"url": "http://localhost:8000/v1",       "model": "local-model"},
-    "llamacpp":   {"url": "http://localhost:8080/v1",       "model": "local-model"},
-    "localai":    {"url": "http://localhost:8080/v1",       "model": "local-model"},
+    "deepseek":   {"url": "https://api.deepseek.com",                       "model": "deepseek-chat"},
+    "openrouter": {"url": "https://openrouter.ai/api/v1",                   "model": "deepseek/deepseek-chat"},
+    "groq":       {"url": "https://api.groq.com/openai/v1",                 "model": "llama-3.3-70b-versatile"},
+    "google":     {"url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.0-flash"},
+    "ollama":     {"url": "http://localhost:11434/v1",                      "model": "qwen2.5:3b"},
+    "lmstudio":   {"url": "http://localhost:1234/v1",                       "model": "local-model"},
+    "vllm":       {"url": "http://localhost:8000/v1",                       "model": "local-model"},
+    "llamacpp":   {"url": "http://localhost:8080/v1",                       "model": "local-model"},
+    "localai":    {"url": "http://localhost:8080/v1",                       "model": "local-model"},
 }
 
 PROVIDER_MODELS = {
@@ -563,11 +570,18 @@ PROVIDER_MODELS = {
         "gemma2-9b-it",
         "qwen-2.5-32b",
     ],
+    "google": [
+        "gemini-2.0-flash",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+    ],
     "ollama": [], "lmstudio": [], "vllm": [], "llamacpp": [], "localai": [],
 }
 
 LABELS = {
     "deepseek": "DeepSeek", "openrouter": "OpenRouter", "groq": "Groq",
+    "google": "Google AI Studio",
     "ollama": "Ollama", "lmstudio": "LM Studio", "vllm": "vLLM",
     "llamacpp": "llama.cpp", "localai": "LocalAI",
 }
@@ -588,7 +602,6 @@ def load_providers() -> dict:
             return json.loads(PROVIDERS_FILE.read_text())
         except Exception:
             pass
-    # seed from env
     name = PROVIDER
     defaults = PROVIDER_DEFAULTS.get(name, PROVIDER_DEFAULTS["deepseek"])
     return {
@@ -744,6 +757,7 @@ class DeepSeekClient:
              429: "rate limited"}.get(s, "")
         if not b: return ""
         if self.provider == "openrouter": return b + " — openrouter.ai/keys"
+        if self.provider == "google": return b + " — aistudio.google.com/apikey"
         if self.provider in LOCAL_PROVIDERS: return b + " — is the local server running?"
         return b + " — platform.deepseek.com/api_keys"
     def _error(self, s, body):
