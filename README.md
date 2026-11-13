@@ -7,10 +7,9 @@
 
 <br/>
 
-[![Version](https://img.shields.io/badge/version-3.2.0-40e0d0?style=flat-square)](https://github.com/AyhanMansur/AyhanX-Agent/blob/main/ai.sh)
+[![Version](https://img.shields.io/badge/version-3.2.0-4FCC624?logo=Version&logoColor=black)](https://linux.org)
 [![Linux](https://img.shields.io/badge/Linux-Any-FCC624?logo=linux&logoColor=black)](https://linux.org)
 [![Shell](https://img.shields.io/badge/Bash%2BPython-3776AB?logo=python&logoColor=white)](https://www.python.org)
-[![DeepSeek](https://img.shields.io/badge/DeepSeek-Chat%20%26%20Reasoner-5eead4)](https://deepseek.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](https://github.com/AyhanMansur/AyhanX-Agent/blob/main/LICENSE)
 [![Star](https://img.shields.io/github/stars/AyhanMansur/AyhanX-Agent?style=social)](https://github.com/AyhanMansur/AyhanX-Agent/)
 [![Fork](https://img.shields.io/github/forks/AyhanMansur/AyhanX-Agent?style=social)](https://github.com/AyhanMansur/AyhanX-Agent/)
