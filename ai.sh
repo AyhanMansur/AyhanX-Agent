@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-#   AI RUNNER · premium terminal client for DeepSeek
+#   AyhanX-Agent · premium terminal client for DeepSeek
 #   Repository:  https://github.com/AyhanMansur/AyhanX-Agent
 #   Version:     3.2.0
 #
@@ -133,7 +133,7 @@ print_logo() {
 }
 
 print_tagline() {
-  printf '  %s◆%s %s%sAI RUNNER%s  %s· DeepSeek terminal · v%s%s\n' \
+  printf '  %s◆%s %s%sAyhanX-Agent%s  %s· DeepSeek terminal · v%s%s\n' \
     "$V1" "$RS" "$BD" "$V1" "$RS" "$MT" "$VERSION" "$RS"
   rule
 }
@@ -141,7 +141,7 @@ print_tagline() {
 print_outro() {
   echo
   rule
-  printf '  %s◆%s %sthanks for using AI Runner%s\n' "$V1" "$RS" "$BD" "$RS"
+  printf '  %s◆%s %sthanks for using AyhanX-Agent%s\n' "$V1" "$RS" "$BD" "$RS"
   printf '  %s%s%s\n\n' "$MT" "$REPO_URL" "$RS"
 }
 
@@ -252,7 +252,7 @@ ensure_key() {
 write_tools() {
   mkdir -p "$RUNNER_DIR"
   cat > "$RUNNER_DIR/tools.py" <<'PYEOF'
-"""Tool definitions and implementations for AI Runner agent mode."""
+"""Tool definitions and implementations for AyhanX-Agent agent mode."""
 import json
 import subprocess
 from datetime import datetime, timezone
@@ -412,7 +412,7 @@ PYEOF
 # ============================================================================
 write_tui() {
   cat > "$RUNNER_DIR/tui.py" <<'PYEOF'
-"""AI Runner — premium terminal chat for DeepSeek."""
+"""AyhanX-Agent — premium terminal chat for DeepSeek."""
 import html
 import json
 import os
@@ -447,6 +447,16 @@ CHATS_DIR = APP_DIR / "chats"
 CHATS_DIR.mkdir(parents=True, exist_ok=True)
 
 MODELS = ["deepseek-chat", "deepseek-reasoner"]
+START = os.environ.get("AYHANX_START", "new")
+
+
+def all_models(cfg) -> list:
+    return MODELS + [m for m in cfg.custom_models if m not in MODELS]
+
+
+def save_last(conv) -> None:
+    if conv.messages:
+        (CHATS_DIR / "last.json").write_text(json.dumps(conv.messages, indent=2))
 
 # ---- palette ---------------------------------------------------------------
 VIOLET = "#40e0d0"        # turquoise (accent)
@@ -469,6 +479,7 @@ class Config:
     system_prompt: str = ""
     agent_mode: bool = False
     max_context_messages: int = 40
+    custom_models: list = field(default_factory=list)
 
     @classmethod
     def load(cls) -> "Config":
@@ -625,7 +636,7 @@ def mode_chip(agent: bool) -> Text:
 
 
 def show_header(cfg: Config) -> None:
-    left = Text.assemble(("◆ ", VIOLET), gradient("AI RUNNER"),
+    left = Text.assemble(("◆ ", VIOLET), gradient("AyhanX-Agent"),
                          ("   ", ""), (f"v{VERSION}", MUTED))
     right = Text.assemble(model_chip(cfg.model), ("  ", ""), mode_chip(cfg.agent_mode))
     grid = Table.grid(expand=True)
@@ -678,6 +689,7 @@ def help_panel() -> None:
         ("/new", "start a new conversation"),
         ("/clear", "clear the screen"),
         ("/model [name]", "show or switch the model"),
+        ("/model add <name>", "add a model to the list"),
         ("/system [text]", "show or set the system prompt"),
         ("/agent", "toggle agent mode (tools)"),
         ("/save [name]", "save this conversation"),
@@ -901,6 +913,10 @@ def main() -> int:
 
     conv = Conversation()
     show_header(cfg)
+    if START == "resume" and (CHATS_DIR / "last.json").exists():
+        conv = Conversation.load("last")
+        notice(f"resumed last chat · {len(conv.messages)} messages")
+        console.print()
 
     session = PromptSession(
         key_bindings=KB,
@@ -918,6 +934,7 @@ def main() -> int:
             console.print(Text("  ^C", style=MUTED))
             continue
         except EOFError:
+            save_last(conv)
             console.print()
             notice("bye", MUTED)
             return 0
@@ -933,6 +950,7 @@ def main() -> int:
             args = parts[1].split() if len(parts) > 1 else []
 
             if cmd in ("/exit", "/quit"):
+                save_last(conv)
                 notice("bye", MUTED)
                 return 0
             elif cmd == "/help":
@@ -944,19 +962,29 @@ def main() -> int:
                 conv = Conversation()
                 notice("new conversation started")
             elif cmd == "/model":
+                models = all_models(cfg)
                 if not args:
                     chips = Text.assemble(*[
                         (" " + m + " " + ("◆" if m == cfg.model else " ") + "  ",
                          f"bold #0f0a1f on {VIOLET}" if m == cfg.model else f"{SOFT}")
-                        for m in MODELS
+                        for m in models
                     ])
                     console.print(Text("  models  ", style=MUTED), chips)
-                elif args[0] in MODELS:
+                elif args[0].lower() == "add":
+                    if len(args) < 2:
+                        notice("usage: /model add <name>", RED)
+                    else:
+                        name = args[1]
+                        if name not in models:
+                            cfg.custom_models.append(name)
+                            cfg.save()
+                        notice(f"model added: {name}  ·  switch with /model {name}")
+                elif args[0] in models:
                     cfg.model = args[0]
                     cfg.save()
                     notice(f"model → {args[0]}")
                 else:
-                    notice(f"unknown model: {args[0]}", RED)
+                    notice(f"unknown model: {args[0]}  ·  add it with /model add {args[0]}", RED)
             elif cmd == "/system":
                 txt = " ".join(args).strip()
                 if not txt:
@@ -1039,6 +1067,59 @@ cmd_tui() {
   PYTHONPATH="$APP_DIR" "$VENV/bin/python" -m runner.tui || true
 }
 
+add_model() {
+  printf '  %s›%s new model id %s(e.g. deepseek-chat)%s: ' "$PK" "$RS" "$MT" "$RS"
+  local name=""
+  read -r name || true
+  name="${name// /}"
+  if [[ -z "$name" ]]; then warn "no model name given"; return 0; fi
+  if "$VENV/bin/python" - "$name" "$CONFIG_FILE" <<'MODELPY'
+import json, os, sys
+name, path = sys.argv[1], sys.argv[2]
+data = json.load(open(path)) if os.path.exists(path) else {}
+models = data.get("custom_models", [])
+if name not in models:
+    models.append(name)
+data["custom_models"] = models
+json.dump(data, open(path, "w"), indent=2)
+os.chmod(path, 0o600)
+MODELPY
+  then
+    ok "model added: $name"
+  else
+    err "could not save model"
+  fi
+}
+
+post_menu() {
+  echo
+  rule
+  printf '  %s◆%s %sWhat next?%s   %s[r]%s resume last chat   %s[n]%s new chat   %s[a]%s add model   %s[q]%s quit\n' \
+    "$V1" "$RS" "$BD" "$RS" "$C1" "$RS" "$C1" "$RS" "$C1" "$RS" "$C1" "$RS"
+  local key=""
+  read -r -s -n 1 key || key="q"
+  echo
+  printf '%s' "$key"
+}
+
+chat_loop() {
+  local next="new" choice
+  while true; do
+    clear
+    print_logo
+    print_tagline
+    export AYHANX_START="$next"
+    cmd_tui
+    choice="$(post_menu)"
+    case "$choice" in
+      r|R) next="resume" ;;
+      a|A) add_model; sleep 1; next="new" ;;
+      q|Q) break ;;
+      *)   next="new" ;;
+    esac
+  done
+}
+
 cmd_ask() {
   local prompt="$*"
   if [[ -z "$prompt" ]]; then err "empty prompt"; exit 1; fi
@@ -1112,7 +1193,7 @@ cmd_config() {
 
 cmd_version() {
   section "Version"
-  info "ai-runner  $VERSION"
+  info "AyhanX-Agent  $VERSION"
   info "repo       $REPO_URL"
   info "app dir    $APP_DIR"
   if [[ -x "$VENV/bin/python" ]]; then
@@ -1150,11 +1231,7 @@ main() {
       ok "runner ready"
 
       sleep 0.2
-      clear
-      print_logo
-      print_tagline
-
-      cmd_tui
+      chat_loop
 
       print_outro
       ;;
