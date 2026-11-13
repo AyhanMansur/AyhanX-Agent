@@ -5,11 +5,11 @@
 
 **کلاینت ترمینالی پریمیوم برای چت با DeepSeek — استایل Claude Code**
 
-[![Version](https://img.shields.io/badge/version-3.2.0-40e0d0?style=flat-square)](./ai.sh)
-[![License](https://img.shields.io/badge/license-MIT-34d399?style=flat-square)](./LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10%20–%203.13-5eead4?style=flat-square)](https://python.org)
-[![Platform](https://img.shields.io/badge/platform-linux-fbbf24?style=flat-square)]()
-[![Stars](https://img.shields.io/github/stars/AyhanMansur/AyhanX-Agent?style=flat-square&color=40e0d0)](https://github.com/AyhanMansur/AyhanX-Agent/stargazers)
+[![Linux](https://img.shields.io/badge/Linux-Any-FCC624?logo=linux)](https://linux.org)
+[![Shell](https://img.shields.io/badge/Bash%2BPython-3776AB?logo=python)](https://www.python.org)
+[![License](https://img.shields.io/badge/License-MIT-yellow)](https://github.com/AyhanMansur/AyhanX-Direct/blob/main/LICENSE)
+[![Star](https://img.shields.io/github/stars/AyhanMansur/AyhanX-Direct?style=social)](https://github.com/AyhanMansur/AyhanX-Direct/)
+[![Fork](https://img.shields.io/github/forks/AyhanMansur/AyhanX-Direct?style=social)](https://github.com/AyhanMansur/AyhanX-Direct/)
 
 </div>
 
