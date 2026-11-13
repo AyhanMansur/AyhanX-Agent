@@ -4,7 +4,7 @@
 <a href="https://github.com/AyhanMansur/AyhanX-Agent">
   <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1200&color=40E0D0&center=true&vCenter=true&width=680&lines=AyhanX-Agent;Premium+terminal+chat+for+DeepSeek;Streaming+%7C+Agent+Mode+%7C+Tools;One+file.+Zero+config." alt="Typing animation"/>
 </a>
-
+<br/>
 <br/>
 
 [![Version](https://img.shields.io/badge/version-3.2.0-4FCC624?logo=Version&logoColor=black)](https://linux.org)
