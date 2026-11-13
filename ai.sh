@@ -2,6 +2,7 @@
 # ============================================================
 #   AI PLATFORM  ·  DeepSeek Chat + Agent  ·  single-file app
 #   Usage:  ./ai_platform.sh [port]      (default: 8080)
+#   Works on: any Linux with bash + curl
 # ============================================================
 set -euo pipefail
 
@@ -36,7 +37,7 @@ print_banner() {
     printf '%s%s%s\n' "${BD}${colors[$i]}" "${lines[$i]}" "$RS"
   done
   printf '%-100s\n' | sed 's/ /─/g' | sed "s/^/${DM}${B2}/; s/$/${RS}/"
-  printf '  %s%sAI Platform%s   %s·%s   %sDeepSeek Chat + Agent%s   %s·%s   %sv1.1%s\n\n' \
+  printf '  %s%sAI Platform%s   %s·%s   %sDeepSeek Chat + Agent%s   %s·%s   %sv1.2%s\n\n' \
     "$BD" "$B4" "$RS" "$DM" "$RS" "$BD" "$RS" "$DM" "$RS" "$DM" "$RS"
 }
 
@@ -47,51 +48,93 @@ err()     { printf '%s  ✗%s %s\n' "$B1" "$RS" "$*" >&2; }
 
 print_banner
 
-# ---------- Find a compatible Python ----------
-# Python 3.13+ may lack wheels for pydantic-core / uvicorn — prefer 3.10–3.12.
+# ============================================================
+#  Step 1 — find a usable Python (3.10–3.13) OR install one
+# ============================================================
 section "Checking environment"
 
-find_python() {
-  local candidates=(python3.12 python3.11 python3.10 python3)
-  for cand in "${candidates[@]}"; do
-    if command -v "$cand" >/dev/null 2>&1; then
-      local ver
-      ver=$("$cand" -c 'import sys;print("{}.{}".format(*sys.version_info[:2]))' 2>/dev/null || echo "0.0")
-      local major="${ver%.*}" minor="${ver#*.}"
-      if (( major == 3 && minor >= 10 && minor <= 12 )); then
-        echo "$cand"
-        return 0
-      fi
-    fi
-  done
-  return 1
+is_good_python() {
+  # returns 0 if $1 is python 3.10..3.13
+  local bin="$1"
+  command -v "$bin" >/dev/null 2>&1 || return 1
+  "$bin" -c 'import sys; sys.exit(0 if (3,10)<=sys.version_info[:2]<=(3,13) else 1)' 2>/dev/null
 }
 
-if ! PYTHON_BIN="$(find_python)"; then
-  err "No compatible Python found (need 3.10, 3.11 or 3.12)."
-  err "Your system has:"
-  for c in python3.12 python3.11 python3.10 python3; do
-    command -v "$c" >/dev/null 2>&1 && \
-      printf '    %s  →  %s\n' "$c" "$("$c" --version 2>&1)" >&2
-  done
+PYTHON_BIN=""
+
+# Try common candidates already on PATH
+for cand in python3.12 python3.11 python3.10 python3.13 python3; do
+  if is_good_python "$cand"; then PYTHON_BIN="$cand"; break; fi
+done
+
+# If nothing good found, try `uv` (works even with only python 3.14 installed)
+if [[ -z "$PYTHON_BIN" ]]; then
+  warn "no Python 3.10–3.13 on system → installing uv (auto-manages Python)"
+  if ! command -v uv >/dev/null 2>&1; then
+    if command -v curl >/dev/null 2>&1; then
+      curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1 || true
+      export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    fi
+  fi
+  if command -v uv >/dev/null 2>&1; then
+    ok "uv installed → $(uv --version)"
+    # uv can install a managed Python 3.12
+    if uv python install 3.12 >/dev/null 2>&1; then
+      UV_PY="$(uv python find 3.12 2>/dev/null || true)"
+      if [[ -n "$UV_PY" ]] && is_good_python "$UV_PY"; then
+        PYTHON_BIN="$UV_PY"
+        ok "downloaded Python 3.12 via uv → $PYTHON_BIN"
+      fi
+    fi
+  else
+    warn "uv install failed"
+  fi
+fi
+
+# Last resort: pyenv
+if [[ -z "$PYTHON_BIN" ]]; then
+  warn "trying pyenv to build Python 3.12 (this can take several minutes)"
+  if ! command -v pyenv >/dev/null 2>&1; then
+    curl -LsSf https://pyenv.run | bash >/dev/null 2>&1 || true
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+  fi
+  if command -v pyenv >/dev/null 2>&1; then
+    eval "$(pyenv init -)" 2>/dev/null || true
+    if pyenv install -s 3.12.7 >/dev/null 2>&1; then
+      PYENV_PY="$PYENV_ROOT/versions/3.12.7/bin/python"
+      if [[ -x "$PYENV_PY" ]] && is_good_python "$PYENV_PY"; then
+        PYTHON_BIN="$PYENV_PY"
+        ok "built Python 3.12 via pyenv"
+      fi
+    fi
+  fi
+fi
+
+if [[ -z "$PYTHON_BIN" ]]; then
+  err "Could not obtain Python 3.10–3.13 automatically."
   echo
-  warn "Install one of these and re-run:"
-  printf '    Debian/Ubuntu:  %sapt install python3.11 python3.11-venv%s\n' "$DM" "$RS" >&2
-  printf '    Arch:           %spacman -S python311%s\n' "$DM" "$RS" >&2
-  printf '    Fedora:         %ssudo dnf install python3.11%s\n' "$DM" "$RS" >&2
+  warn "Fix it manually with one of these:"
+  printf '    %s1)%s Install uv then re-run:\n' "$BD" "$RS"
+  printf '         curl -LsSf https://astral.sh/uv/install.sh | sh\n' >&2
+  printf '    %s2)%s apt install build-essential zlib1g-dev libssl-dev \\\n' "$BD" "$RS"
+  printf '         libffi-dev libbz2-dev libreadline-dev libsqlite3-dev \\\n' >&2
+  printf '         liblzma-dev libncursesw5-dev tk-dev\n' >&2
+  printf '         then install pyenv and run: pyenv install 3.12.7\n' >&2
   exit 1
 fi
-ok "$PYTHON_BIN → $("$PYTHON_BIN" --version 2>&1)"
+ok "python → $PYTHON_BIN  ($("$PYTHON_BIN" --version 2>&1))"
 
-# ---------- venv ----------
-# If the existing venv is broken or was built with an incompatible python, rebuild.
+# ============================================================
+#  Step 2 — venv (rebuild if broken or incompatible)
+# ============================================================
 needs_rebuild=0
 if [[ ! -d "$VENV" ]]; then
   needs_rebuild=1
 elif [[ ! -x "$VENV/bin/python" ]]; then
   needs_rebuild=1
-elif ! "$VENV/bin/python" -c 'import sys; assert (3,10) <= sys.version_info[:2] <= (3,12)' 2>/dev/null; then
-  warn "existing venv uses incompatible python → rebuilding"
+elif ! is_good_python "$VENV/bin/python"; then
+  warn "existing venv uses unsupported python → rebuilding"
   needs_rebuild=1
 elif ! "$VENV/bin/python" -c 'import uvicorn, fastapi, httpx, pydantic' 2>/dev/null; then
   warn "existing venv is missing packages → rebuilding"
@@ -107,7 +150,7 @@ if (( needs_rebuild )); then
 
   echo "  ${DM}installing fastapi uvicorn httpx pydantic …${RS}"
   if ! "$VENV/bin/pip" install fastapi "uvicorn[standard]" httpx pydantic; then
-    err "pip install failed — see output above"
+    err "pip install failed"
     exit 1
   fi
   ok "dependencies installed"
@@ -115,7 +158,9 @@ else
   ok "virtualenv ready"
 fi
 
-# ---------- API key ----------
+# ============================================================
+#  Step 3 — API key
+# ============================================================
 if [[ -z "${DEEPSEEK_API_KEY:-}" && -f "$APP_DIR/.env" ]]; then
   set -o allexport; . "$APP_DIR/.env"; set +o allexport
 fi
@@ -131,7 +176,9 @@ else
   ok "API key loaded"
 fi
 
-# ---------- Write app.py (unchanged) ----------
+# ============================================================
+#  Step 4 — write backend
+# ============================================================
 section "Writing backend"
 
 cat > "$PY_APP" <<'PYEOF'
@@ -654,19 +701,15 @@ PYEOF
 chmod 600 "$PY_APP"
 ok "backend written to $PY_APP"
 
-# ---------- Final sanity check ----------
+# ============================================================
+#  Step 5 — final sanity check + launch
+# ============================================================
 section "Verifying installation"
-if [[ ! -x "$VENV/bin/uvicorn" ]]; then
-  err "uvicorn binary missing at $VENV/bin/uvicorn — installation failed"
-  exit 1
-fi
-if ! "$VENV/bin/python" -c 'import uvicorn, fastapi, httpx, pydantic' 2>/dev/null; then
-  err "python packages are not importable — venv is broken"
-  exit 1
-fi
+[[ -x "$VENV/bin/uvicorn" ]] || { err "uvicorn binary missing"; exit 1; }
+"$VENV/bin/python" -c 'import uvicorn, fastapi, httpx, pydantic' 2>/dev/null \
+  || { err "python packages not importable"; exit 1; }
 ok "all packages importable"
 
-# ---------- Launch ----------
 section "Starting server"
 LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 printf '%s  →%s http://localhost:%s%s\n' "$B4" "$RS" "$PORT" "$RS"
