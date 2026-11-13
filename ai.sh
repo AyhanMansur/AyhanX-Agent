@@ -2,17 +2,28 @@
 # ============================================================
 #   AI RUNNER  ·  DeepSeek  ·  Web + Terminal UI
 #   Repo:  https://github.com/AyhanMansur/AyhanX-Agent
+#
 #   Usage:
 #     ./ai.sh                → interactive menu
 #     ./ai.sh web [port]     → browser UI on :8080
 #     ./ai.sh tui            → terminal chat
-#     ./ai.sh "prompt"       → one-shot answer
+#     ./ai.sh ask "prompt"   → one-shot answer
+#     ./ai.sh health         → test API connection
 # ============================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="${HOME}/.ai_platform"
 VENV="${APP_DIR}/.venv"
+
+# ---------- Cleanup on exit ----------
+cleanup() {
+  local code=$?
+  printf '%s' "$RS" 2>/dev/null || true
+  stty sane 2>/dev/null || true
+  exit "$code"
+}
+trap cleanup EXIT INT TERM
 
 # ---------- Palette ----------
 if [[ -t 1 ]]; then
@@ -22,6 +33,7 @@ else
   B1= B2= B3= B4= BD= DM= RS=
 fi
 
+# ---------- Banner ----------
 print_banner() {
   local lines=(
 '▄▄▄     ▓██   ██▓ ██░ ██  ▄▄▄       ███▄    █ ▒██   ██▒ ▄▄▄        ▄████ ▓█████  ███▄    █ ▄▄▄█████▓'
@@ -40,10 +52,12 @@ print_banner() {
     printf '%s%s%s\n' "${BD}${colors[$i]}" "${lines[$i]}" "$RS"
   done
   printf '%-100s\n' | sed 's/ /─/g' | sed "s/^/${DM}${B2}/; s/$/${RS}/"
-  printf '  %s%sAI Runner%s   %s·%s   %sDeepSeek%s   %s·%s   %sWeb + Terminal%s\n\n' \
-    "$BD" "$B4" "$RS" "$DM" "$RS" "$BD" "$RS" "$DM" "$RS" "$DM" "$RS"
+  printf '  %s%sAI Runner%s   %s·%s   %sDeepSeek%s   %s·%s   %sWeb + Terminal%s   %s·%s   %sv1.0%s\n\n' \
+    "$BD" "$B4" "$RS" "$DM" "$RS" "$BD" "$RS" "$DM" "$RS" "$DM" "$RS" \
+    "$DM" "$RS" "$DM" "$RS"
 }
 
+# ---------- Helpers ----------
 section() { printf '%s%s▸ %s%s\n' "$BD" "$B3" "$*" "$RS"; }
 ok()      { printf '%s  ✓%s %s\n' "$B4" "$RS" "$*"; }
 warn()    { printf '%s  !%s %s\n' "$B3" "$RS" "$*"; }
@@ -59,7 +73,6 @@ find_python() {
       echo "$c"; return 0
     fi
   done
-  # try uv-managed python
   if command -v uv >/dev/null 2>&1; then
     local p
     p="$(uv python find 3.12 2>/dev/null || true)"
@@ -83,12 +96,11 @@ ensure_env() {
   fi
   ok "python → $PY"
 
-  # rebuild venv if broken or missing packages
   local rebuild=0
   [[ -d "$VENV" ]] || rebuild=1
   [[ -x "$VENV/bin/python" ]] || rebuild=1
   if (( !rebuild )); then
-    "$VENV/bin/python" -c 'import fastapi,uvicorn,httpx,pydantic,rich,questionary' 2>/dev/null || rebuild=1
+    "$VENV/bin/python" -c 'import fastapi,uvicorn,httpx,pydantic,rich' 2>/dev/null || rebuild=1
   fi
   if (( rebuild )); then
     section "Installing packages"
@@ -96,11 +108,11 @@ ensure_env() {
     "$PY" -m venv "$VENV"
     "$VENV/bin/pip" install -q --upgrade pip --timeout 10 --retries 1 2>/dev/null || true
 
-    # mirror fallback
     local mirrors=(
       "https://pypi.org/simple"
       "https://mirror-pypi.runflare.com/simple"
       "https://mirrors.aliyun.com/pypi/simple"
+      "https://pypi.tuna.tsinghua.edu.cn/simple"
     )
     local chosen=""
     for m in "${mirrors[@]}"; do
@@ -114,7 +126,7 @@ ensure_env() {
     "$VENV/bin/pip" install \
       --index-url "$chosen" --trusted-host "$host" \
       --timeout 20 --retries 3 \
-      fastapi "uvicorn[standard]" httpx pydantic rich questionary
+      fastapi "uvicorn[standard]" httpx pydantic rich
     ok "packages installed"
   else
     ok "venv ready"
@@ -138,19 +150,16 @@ ensure_key() {
 }
 
 # ============================================================
-#  TERMINAL CHAT (Rich + questionary)
+#  WRITE: TUI
 # ============================================================
 write_tui() {
   cat > "$APP_DIR/tui.py" <<'PYEOF'
 """Terminal chat client for DeepSeek with Rich."""
 import json
 import os
-import sys
-from pathlib import Path
 
 import httpx
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.rule import Rule
@@ -163,11 +172,10 @@ console = Console()
 
 
 def stream_reply(messages):
-    """Yield chunks from DeepSeek, print inline. Returns full text."""
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
     payload = {"model": MODEL, "messages": messages, "stream": True}
     full = []
-    console.print(f"[bold cyan]AI ▸[/] ", end="")
+    console.print("[bold cyan]AI ▸[/] ", end="")
     try:
         with httpx.Client(timeout=120) as client:
             with client.stream("POST", f"{BASE_URL}/chat/completions",
@@ -201,7 +209,7 @@ def stream_reply(messages):
 def banner():
     console.print(Panel.fit(
         "[bold bright_blue]AI Runner · Terminal[/]\n"
-        "[dim]DeepSeek Chat · type /help for commands[/]",
+        "[dim]DeepSeek Chat · /help for commands[/]",
         border_style="blue",
     ))
 
@@ -219,50 +227,49 @@ def help_text():
 
 def main():
     banner()
-    history: list[dict] = []
-    try:
-        while True:
-            try:
-                text = Prompt.ask("[bold blue]you ▸[/]").strip()
-            except (EOFError, KeyboardInterrupt):
-                console.print("\n[dim]bye[/]")
+    history = []
+    while True:
+        try:
+            text = Prompt.ask("[bold blue]you ▸[/]").strip()
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[dim]bye[/]")
+            return
+        if not text:
+            continue
+        if text.startswith("/"):
+            cmd = text.lower()
+            if cmd in ("/exit", "/quit"):
                 return
-            if not text:
-                continue
-            if text.startswith("/"):
-                cmd = text.lower()
-                if cmd in ("/exit", "/quit"):
-                    return
-                if cmd == "/help":
-                    help_text(); continue
-                if cmd == "/clear":
-                    console.clear(); banner(); continue
-                if cmd == "/model":
-                    console.print(f"[cyan]model:[/] {MODEL}"); continue
-                if cmd == "/new":
-                    history.clear(); console.print("[dim]new conversation[/]"); continue
-                console.print("[red]unknown command[/]"); continue
+            if cmd == "/help":
+                help_text(); continue
+            if cmd == "/clear":
+                console.clear(); banner(); continue
+            if cmd == "/model":
+                console.print(f"[cyan]model:[/] {MODEL}"); continue
+            if cmd == "/new":
+                history.clear(); console.print("[dim]new conversation[/]"); continue
+            console.print("[red]unknown command[/]"); continue
 
-            history.append({"role": "user", "content": text})
-            answer = stream_reply(history)
-            if answer:
-                history.append({"role": "assistant", "content": answer})
-            else:
-                # remove failed turn so history stays clean
-                history.pop()
-                console.print("[dim]reply failed — try again[/]")
-            console.print(Rule(style="bright_black"))
-    except KeyboardInterrupt:
-        console.print("\n[dim]bye[/]")
+        history.append({"role": "user", "content": text})
+        answer = stream_reply(history)
+        if answer:
+            history.append({"role": "assistant", "content": answer})
+        else:
+            history.pop()
+            console.print("[dim]reply failed — try again[/]")
+        console.print(Rule(style="bright_black"))
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        console.print("\n[dim]bye[/]")
 PYEOF
 }
 
 # ============================================================
-#  WEB APP (FastAPI + single HTML)
+#  WRITE: WEB APP
 # ============================================================
 write_web() {
   cat > "$APP_DIR/app.py" <<'PYEOF'
@@ -314,7 +321,7 @@ def init_db() -> None:
         )
 
 
-TOOLS: list[dict[str, Any]] = [
+TOOLS = [
     {"type": "function", "function": {
         "name": "get_current_time",
         "description": "Return current UTC date/time in ISO format.",
@@ -337,21 +344,21 @@ TOOLS: list[dict[str, Any]] = [
 ]
 
 
-def tool_get_current_time(_a: dict) -> str:
+def tool_get_current_time(_a):
     return datetime.now(timezone.utc).isoformat()
 
 
-def tool_calculate(a: dict) -> str:
+def tool_calculate(a):
     expr = a.get("expression", "")
     if not expr or any(ch not in "0123456789+-*/(). %" for ch in expr):
         return f"Error: invalid expression {expr!r}"
     try:
-        return str(eval(expr, {"__builtins__": {}}, {}))  # noqa
+        return str(eval(expr, {"__builtins__": {}}, {}))
     except Exception as e:
         return f"Error: {e}"
 
 
-def tool_list_files(a: dict) -> str:
+def tool_list_files(a):
     base = Path.home()
     target = (base / a.get("subdir", "")).resolve()
     if target != base and base not in target.parents:
@@ -370,7 +377,7 @@ TOOL_IMPL = {
 
 
 async def deepseek_chat(messages, tools=None, stream=False):
-    payload: dict[str, Any] = {"model": MODEL, "messages": messages, "stream": stream}
+    payload = {"model": MODEL, "messages": messages, "stream": stream}
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
@@ -412,7 +419,7 @@ async def deepseek_chat(messages, tools=None, stream=False):
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app):
     init_db()
     yield
 
@@ -426,7 +433,7 @@ class ChatReq(BaseModel):
     agent: bool = False
 
 
-def _sse(obj: dict) -> str:
+def _sse(obj):
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
 
@@ -509,7 +516,7 @@ async def chat(req: ChatReq):
                 yield _sse({"delta": "[stopped: max iterations]", "done": True,
                             "conversation_id": cid}); return
 
-            full: list[str] = []
+            full = []
             stream = await deepseek_chat(history, stream=True)
             async for item in stream:
                 if "__error__" in item:
@@ -535,35 +542,31 @@ def health():
 
 
 HTML = r"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <title>AI Runner · DeepSeek</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-:root{
-  --bg:#0a0f1c; --panel:#0f172a; --panel2:#172033; --line:#1e293b;
-  --fg:#e2e8f0; --dim:#94a3b8;
-  --blue:#3b82f6; --cyan:#22d3ee;
-  --green:#10b981; --red:#ef4444; --amber:#f59e0b;
-  --user:#1e3a8a; --bot:#111827;
-}
+:root{--bg:#0a0f1c;--panel:#0f172a;--panel2:#172033;--line:#1e293b;--fg:#e2e8f0;
+--dim:#94a3b8;--blue:#3b82f6;--cyan:#22d3ee;--red:#ef4444;--amber:#f59e0b;
+--user:#1e3a8a;--bot:#111827}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
-  font:14.5px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+font:14.5px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 #app{display:flex;height:100vh}
 #sidebar{width:280px;background:var(--panel);border-right:1px solid var(--line);
-  display:flex;flex-direction:column}
+display:flex;flex-direction:column}
 #sidebar header{padding:16px;border-bottom:1px solid var(--line);
-  display:flex;align-items:center;gap:10px}
+display:flex;align-items:center;gap:10px}
 .brand{font-weight:700;font-size:14px}
 .brand .dot{display:inline-block;width:8px;height:8px;border-radius:50%;
-  background:var(--cyan);margin-right:8px;box-shadow:0 0 8px var(--cyan)}
+background:var(--cyan);margin-right:8px;box-shadow:0 0 8px var(--cyan)}
 #newchat{margin:14px;padding:10px;background:linear-gradient(135deg,var(--blue),var(--cyan));
-  color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px}
+color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px}
+#newchat:hover{filter:brightness(1.1)}
 #convs{flex:1;overflow-y:auto;padding:0 10px 14px}
 .conv{padding:9px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--dim);
-  display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:2px}
+display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:2px;
+transition:background .15s}
 .conv:hover,.conv.active{background:var(--panel2);color:var(--fg)}
 .conv.active{box-shadow:inset 3px 0 0 var(--blue)}
 .conv span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -571,185 +574,135 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
 .conv:hover .del{opacity:1}
 main{flex:1;display:flex;flex-direction:column;min-width:0}
 #topbar{padding:14px 22px;border-bottom:1px solid var(--line);
-  display:flex;align-items:center;gap:16px;background:var(--panel)}
+display:flex;align-items:center;gap:16px;background:var(--panel)}
 #title{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toggle{display:flex;align-items:center;gap:7px;font-size:12.5px;
-  color:var(--dim);user-select:none;cursor:pointer}
+color:var(--dim);user-select:none;cursor:pointer}
 .toggle input{accent-color:var(--cyan)}
 #chat{flex:1;overflow-y:auto;padding:26px 20px 140px}
 .msg{max-width:820px;margin:0 auto 20px;display:flex;gap:12px}
 .avatar{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;
-  justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
 .user .avatar{background:var(--user);color:#93c5fd}
 .bot .avatar{background:var(--bot);color:var(--cyan);border:1px solid var(--line)}
 .bubble{flex:1;min-width:0;padding:12px 15px;border-radius:10px;
-  white-space:pre-wrap;word-wrap:break-word}
+white-space:pre-wrap;word-wrap:break-word}
 .user .bubble{background:var(--user)}
 .bot .bubble{background:var(--bot);border:1px solid var(--line)}
 .err .bubble{background:#7f1d1d;border:1px solid var(--red)}
 .tool{max-width:820px;margin:-10px auto 14px;font-size:12px;color:var(--amber);
-  padding-left:44px;font-family:ui-monospace,monospace}
+padding-left:44px;font-family:ui-monospace,monospace}
 #composer{position:fixed;bottom:0;left:280px;right:0;
-  background:linear-gradient(transparent,var(--bg) 40%);padding:14px 20px 18px}
+background:linear-gradient(transparent,var(--bg) 40%);padding:14px 20px 18px}
 #cwrap{max-width:820px;margin:0 auto;background:var(--panel);
-  border:1px solid var(--line);border-radius:12px;padding:10px;
-  display:flex;gap:8px;align-items:flex-end;transition:border-color .15s}
+border:1px solid var(--line);border-radius:12px;padding:10px;
+display:flex;gap:8px;align-items:flex-end;transition:border-color .15s}
 #cwrap:focus-within{border-color:var(--blue)}
 #input{flex:1;background:transparent;border:none;outline:none;color:var(--fg);
-  font:inherit;resize:none;max-height:200px;padding:6px;line-height:1.5}
+font:inherit;resize:none;max-height:200px;padding:6px;line-height:1.5}
 #send{width:36px;height:36px;border:none;border-radius:8px;color:#fff;cursor:pointer;
-  background:linear-gradient(135deg,var(--blue),var(--cyan));font-size:15px}
+background:linear-gradient(135deg,var(--blue),var(--cyan));font-size:15px}
 #send:disabled{opacity:.5;cursor:not-allowed}
 .hint{max-width:820px;margin:8px auto 0;font-size:11px;color:var(--dim);text-align:center}
 code{background:#0a0f1c;padding:2px 6px;border-radius:4px;font-size:90%;
-  border:1px solid var(--line)}
+border:1px solid var(--line)}
 pre{background:#0a0f1c;padding:12px;border-radius:8px;border:1px solid var(--line);
-  overflow-x:auto}
+overflow-x:auto}
 @media(max-width:760px){#composer{left:0}}
-</style>
-</head>
-<body>
+</style></head><body>
 <div id="app">
-  <aside id="sidebar">
-    <header><div class="brand"><span class="dot"></span>AI Runner</div></header>
-    <button id="newchat">+ New chat</button>
-    <div id="convs"></div>
-  </aside>
-  <main>
-    <div id="topbar">
-      <div id="title">New chat</div>
-      <label class="toggle"><input type="checkbox" id="agentToggle"> Agent</label>
-    </div>
-    <div id="chat"></div>
-    <div id="composer">
-      <div id="cwrap">
-        <textarea id="input" rows="1"
-          placeholder="Message DeepSeek…  (Enter to send · Shift+Enter newline)"></textarea>
-        <button id="send" title="Send">➤</button>
-      </div>
-      <div class="hint">tools: <code>time</code> <code>calculate</code> <code>list_files</code></div>
-    </div>
-  </main>
+<aside id="sidebar">
+<header><div class="brand"><span class="dot"></span>AI Runner</div></header>
+<button id="newchat">+ New chat</button>
+<div id="convs"></div>
+</aside>
+<main>
+<div id="topbar">
+<div id="title">New chat</div>
+<label class="toggle"><input type="checkbox" id="agentToggle"> Agent</label>
 </div>
+<div id="chat"></div>
+<div id="composer">
+<div id="cwrap">
+<textarea id="input" rows="1"
+placeholder="Message DeepSeek…  (Enter to send · Shift+Enter newline)"></textarea>
+<button id="send" title="Send">➤</button>
+</div>
+<div class="hint">tools: <code>time</code> <code>calculate</code> <code>list_files</code></div>
+</div>
+</main></div>
 <script>
-const $ = s => document.querySelector(s);
-const chatEl = $('#chat'), convsEl = $('#convs'), inputEl = $('#input');
-const sendBtn = $('#send'), agentToggle = $('#agentToggle'), titleEl = $('#title');
-let currentConv = null, streaming = false;
-
-const api = async (p, o={}) => {
-  const r = await fetch(p, {headers:{'Content-Type':'application/json'}, ...o});
-  if(!r.ok) throw new Error(await r.text());
-  return r.json();
-};
-const esc = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const md = s => esc(s)
-  .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-  .replace(/`([^`]+)`/g, '<code>$1</code>');
-
+const $=s=>document.querySelector(s);
+const chatEl=$('#chat'),convsEl=$('#convs'),inputEl=$('#input');
+const sendBtn=$('#send'),agentToggle=$('#agentToggle'),titleEl=$('#title');
+let currentConv=null,streaming=false;
+const api=async(p,o={})=>{const r=await fetch(p,{headers:{'Content-Type':'application/json'},...o});
+if(!r.ok)throw new Error(await r.text());return r.json();};
+const esc=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const md=s=>esc(s).replace(/```([\s\S]*?)```/g,'<pre><code>$1</code></pre>')
+.replace(/`([^`]+)`/g,'<code>$1</code>');
 async function loadConvs(){
-  const list = await api('/api/conversations');
-  convsEl.innerHTML = '';
-  for(const c of list){
-    const d = document.createElement('div');
-    d.className = 'conv' + (c.id === currentConv ? ' active' : '');
-    d.innerHTML = `<span>${esc(c.title)}</span><span class="del" title="delete">✕</span>`;
-    d.querySelector('span').onclick = () => openConv(c.id, c.title);
-    d.querySelector('.del').onclick = async e => {
-      e.stopPropagation();
-      if(!confirm('Delete this chat?')) return;
-      await api('/api/conversations/'+c.id, {method:'DELETE'});
-      if(currentConv === c.id){ currentConv = null; chatEl.innerHTML=''; titleEl.textContent='New chat'; }
-      loadConvs();
-    };
-    convsEl.appendChild(d);
-  }
-}
-
-async function openConv(id, title){
-  currentConv = id; titleEl.textContent = title || 'Chat'; chatEl.innerHTML = '';
-  const msgs = await api(`/api/conversations/${id}/messages`);
-  msgs.forEach(m => appendMsg(m.role, m.content));
-  loadConvs(); scrollDown();
-}
-
-function appendMsg(role, content, cls=''){
-  const w = document.createElement('div');
-  w.className = 'msg ' + (role === 'user' ? 'user' : 'bot') + (cls ? ' '+cls : '');
-  w.innerHTML = `<div class="avatar">${role==='user'?'U':'AI'}</div>
-                 <div class="bubble">${md(content)}</div>`;
-  chatEl.appendChild(w);
-  return w.querySelector('.bubble');
-}
-
-function appendTool(text){
-  const t = document.createElement('div');
-  t.className = 'tool'; t.textContent = '🔧 ' + text;
-  chatEl.appendChild(t); scrollDown();
-}
-const scrollDown = () => chatEl.scrollTop = chatEl.scrollHeight;
-
+const list=await api('/api/conversations');
+convsEl.innerHTML='';
+for(const c of list){
+const d=document.createElement('div');
+d.className='conv'+(c.id===currentConv?' active':'');
+d.innerHTML=`<span>${esc(c.title)}</span><span class="del" title="delete">✕</span>`;
+d.querySelector('span').onclick=()=>openConv(c.id,c.title);
+d.querySelector('.del').onclick=async e=>{
+e.stopPropagation();
+if(!confirm('Delete this chat?'))return;
+await api('/api/conversations/'+c.id,{method:'DELETE'});
+if(currentConv===c.id){currentConv=null;chatEl.innerHTML='';titleEl.textContent='New chat';}
+loadConvs();};
+convsEl.appendChild(d);}}
+async function openConv(id,title){
+currentConv=id;titleEl.textContent=title||'Chat';chatEl.innerHTML='';
+const msgs=await api(`/api/conversations/${id}/messages`);
+msgs.forEach(m=>appendMsg(m.role,m.content));
+loadConvs();scrollDown();}
+function appendMsg(role,content,cls=''){
+const w=document.createElement('div');
+w.className='msg '+(role==='user'?'user':'bot')+(cls?' '+cls:'');
+w.innerHTML=`<div class="avatar">${role==='user'?'U':'AI'}</div>
+<div class="bubble">${md(content)}</div>`;
+chatEl.appendChild(w);return w.querySelector('.bubble');}
+function appendTool(text){const t=document.createElement('div');
+t.className='tool';t.textContent='🔧 '+text;chatEl.appendChild(t);scrollDown();}
+const scrollDown=()=>chatEl.scrollTop=chatEl.scrollHeight;
 async function send(){
-  const text = inputEl.value.trim();
-  if(!text || streaming) return;
-  inputEl.value = ''; inputEl.style.height = 'auto';
-  appendMsg('user', text);
-  const bubble = appendMsg('assistant', '…');
-  streaming = true; sendBtn.disabled = true;
-  let answer = '';
-  try{
-    const r = await fetch('/api/chat', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({conversation_id: currentConv, message: text, agent: agentToggle.checked})
-    });
-    if(!r.ok) throw new Error('HTTP ' + r.status + ': ' + (await r.text()));
-    const reader = r.body.getReader(), dec = new TextDecoder();
-    let buf = '';
-    while(true){
-      const {done, value} = await reader.read();
-      if(done) break;
-      buf += dec.decode(value, {stream:true});
-      let idx;
-      while((idx = buf.indexOf('\n\n')) >= 0){
-        const chunk = buf.slice(0, idx); buf = buf.slice(idx+2);
-        const line = chunk.split('\n').find(l => l.startsWith('data: '));
-        if(!line) continue;
-        const obj = JSON.parse(line.slice(6));
-        if(obj.error){
-          bubble.parentElement.classList.add('err');
-          bubble.textContent = '⚠ ' + obj.error;
-        }
-        else if(obj.delta) { answer += obj.delta; bubble.innerHTML = md(answer); scrollDown(); }
-        else if(obj.tool) appendTool(`call ${obj.tool} ${JSON.stringify(obj.args)}`);
-        else if(obj.tool_result) appendTool(obj.tool_result);
-        else if(obj.done && !currentConv){ currentConv = obj.conversation_id; loadConvs(); }
-      }
-    }
-    if(!answer && !bubble.textContent.startsWith('⚠')) bubble.textContent = '(no content)';
-  }catch(e){
-    bubble.parentElement.classList.add('err');
-    bubble.textContent = '⚠ ' + e.message;
-  }
-  finally{ streaming = false; sendBtn.disabled = false; inputEl.focus(); }
-}
-
-$('#newchat').onclick = () => {
-  currentConv = null; chatEl.innerHTML = ''; titleEl.textContent = 'New chat';
-  inputEl.focus(); loadConvs();
-};
-sendBtn.onclick = send;
-inputEl.addEventListener('keydown', e => {
-  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
-});
-inputEl.addEventListener('input', () => {
-  inputEl.style.height = 'auto';
-  inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
-});
-loadConvs(); inputEl.focus();
-</script>
-</body>
-</html>
-"""
+const text=inputEl.value.trim();
+if(!text||streaming)return;
+inputEl.value='';inputEl.style.height='auto';
+appendMsg('user',text);
+const bubble=appendMsg('assistant','…');
+streaming=true;sendBtn.disabled=true;let answer='';
+try{
+const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+body:JSON.stringify({conversation_id:currentConv,message:text,agent:agentToggle.checked})});
+if(!r.ok)throw new Error('HTTP '+r.status+': '+(await r.text()));
+const reader=r.body.getReader(),dec=new TextDecoder();let buf='';
+while(true){const{done,value}=await reader.read();if(done)break;
+buf+=dec.decode(value,{stream:true});let idx;
+while((idx=buf.indexOf('\n\n'))>=0){const chunk=buf.slice(0,idx);buf=buf.slice(idx+2);
+const line=chunk.split('\n').find(l=>l.startsWith('data: '));if(!line)continue;
+const obj=JSON.parse(line.slice(6));
+if(obj.error){bubble.parentElement.classList.add('err');bubble.textContent='⚠ '+obj.error;}
+else if(obj.delta){answer+=obj.delta;bubble.innerHTML=md(answer);scrollDown();}
+else if(obj.tool)appendTool(`call ${obj.tool} ${JSON.stringify(obj.args)}`);
+else if(obj.tool_result)appendTool(obj.tool_result);
+else if(obj.done&&!currentConv){currentConv=obj.conversation_id;loadConvs();}}}
+if(!answer&&!bubble.textContent.startsWith('⚠'))bubble.textContent='(no content)';
+}catch(e){bubble.parentElement.classList.add('err');bubble.textContent='⚠ '+e.message;}
+finally{streaming=false;sendBtn.disabled=false;inputEl.focus();}}
+$('#newchat').onclick=()=>{currentConv=null;chatEl.innerHTML='';titleEl.textContent='New chat';
+inputEl.focus();loadConvs();};
+sendBtn.onclick=send;
+inputEl.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+inputEl.addEventListener('input',()=>{inputEl.style.height='auto';
+inputEl.style.height=Math.min(inputEl.scrollHeight,200)+'px';});
+loadConvs();inputEl.focus();
+</script></body></html>"""
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -759,17 +712,17 @@ PYEOF
 }
 
 # ============================================================
-#  MENU
+#  MENU + COMMANDS
 # ============================================================
 show_menu() {
   echo
   section "Choose mode"
   cat <<EOF
 
-   ${B4}1${RS})  ${BD}web${RS}    → browser UI at http://localhost:8080
-   ${B4}2${RS})  ${BD}tui${RS}    → terminal chat (Rich)
-   ${B4}3${RS})  ${BD}ask${RS}    → one-shot: ask "prompt"
-   ${B4}4${RS})  ${BD}health${RS} → ping DeepSeek API
+   ${B4}1${RS})  ${BD}web${RS}     → browser UI at http://localhost:8080
+   ${B4}2${RS})  ${BD}tui${RS}     → terminal chat (Rich)
+   ${B4}3${RS})  ${BD}ask${RS}     → one-shot: ask a prompt
+   ${B4}4${RS})  ${BD}health${RS}  → test DeepSeek API
    ${B4}q${RS})  quit
 
 EOF
@@ -783,41 +736,48 @@ cmd_web() {
   printf '%s  →%s http://localhost:%s\n' "$B4" "$RS" "$port"
   [[ -n "$ip" ]] && printf '%s  →%s http://%s:%s  (LAN)\n' "$B4" "$RS" "$ip" "$port"
   printf '%s  Ctrl+C to stop%s\n\n' "$DM" "$RS"
-  cd "$APP_DIR"
-  exec "$VENV/bin/uvicorn" app:app --host 0.0.0.0 --port "$port"
+
+  ( cd "$APP_DIR" && "$VENV/bin/uvicorn" app:app --host 0.0.0.0 --port "$port" ) || true
+
+  echo
+  section "Server stopped"
+  printf '%s  press Enter to return to menu…%s\n' "$DM" "$RS"
+  read -r _ || true
 }
 
 cmd_tui() {
-  export DEEPSEEK_API_KEY
-  exec "$VENV/bin/python" "$APP_DIR/tui.py"
+  "$VENV/bin/python" "$APP_DIR/tui.py" || true
+  echo
+  section "Terminal chat closed"
+  printf '%s  press Enter to return to menu…%s\n' "$DM" "$RS"
+  read -r _ || true
 }
 
 cmd_ask() {
   local prompt="$*"
   [[ -z "$prompt" ]] && { err "empty prompt"; exit 1; }
   "$VENV/bin/python" - "$prompt" <<'PY'
-import json, os, sys
+import os, sys
 import httpx
 p = sys.argv[1]
 h = {"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
      "Content-Type": "application/json"}
 r = httpx.post(
-    "https://api.deepseek.com/chat/completions",
-    headers=h,
+    "https://api.deepseek.com/chat/completions", headers=h,
     json={"model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
           "messages": [{"role": "user", "content": p}]},
     timeout=60,
 )
 if r.status_code >= 400:
     print(f"HTTP {r.status_code}: {r.text}", file=sys.stderr); sys.exit(1)
-data = r.json()
-print(data["choices"][0]["message"]["content"])
+print(r.json()["choices"][0]["message"]["content"])
 PY
 }
 
 cmd_health() {
   "$VENV/bin/python" - <<'PY'
-import os, httpx
+import os
+import httpx
 h = {"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
      "Content-Type": "application/json"}
 try:
