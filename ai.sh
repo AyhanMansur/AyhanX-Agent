@@ -2,11 +2,10 @@
 # ============================================================================
 #   AI RUNNER  ·  DeepSeek Terminal Chat  ·  Claude Code Style
 #   Repository:  https://github.com/AyhanMansur/AyhanX-Agent
-#   Version:     3.0.0
+#   Version:     3.1.0
 #
-#   Straight-to-chat terminal AI client. Auto-configures Python,
-#   installs dependencies with mirror fallback, and launches an
-#   interactive REPL with streaming, tools, save/load, and more.
+#   Straight-to-chat terminal AI client. Clears the screen after setup
+#   and shows only the banner + chat prompt.
 #
 #   Usage:
 #     ./ai.sh                → banner + straight to chat
@@ -26,7 +25,7 @@ ENV_FILE="${APP_DIR}/.env"
 HISTORY_FILE="${APP_DIR}/history.txt"
 CHATS_DIR="${APP_DIR}/chats"
 REPO_URL="https://github.com/AyhanMansur/AyhanX-Agent"
-VERSION="3.0.0"
+VERSION="3.1.0"
 
 # ---------- Cleanup trap ----------
 cleanup() {
@@ -65,12 +64,10 @@ print_banner() {
     printf '%s%s%s\n' "${BD}${colors[$i]}" "${lines[$i]}" "$RS"
   done
   printf '%-100s\n' | sed 's/ /─/g' | sed "s/^/${DM}${B2}/; s/$/${RS}/"
-
-  # ---- Info lines (repo + version) ----
   printf '  %s%sAI Runner%s  %s·%s  %sDeepSeek Terminal%s  %s·%s  %sv%s%s\n' \
     "$BD" "$B4" "$RS" "$DM" "$RS" "$BD" "$RS" "$DM" "$RS" "$DM" "$VERSION" "$RS"
   printf '  %s%s%s%s\n' "$DM" "$REPO_URL" "$RS" ""
-  printf '%s\n' "" 
+  printf '%s\n' ""
   printf '%-100s\n' | sed 's/ /─/g' | sed "s/^/${DM}${B2}/; s/$/${RS}/"
   echo
 }
@@ -378,6 +375,7 @@ CHATS_DIR = APP_DIR / "chats"
 CHATS_DIR.mkdir(parents=True, exist_ok=True)
 
 MODELS = ["deepseek-chat", "deepseek-reasoner"]
+QUIET = os.environ.get("AI_RUNNER_QUIET") == "1"
 
 
 @dataclass
@@ -542,20 +540,13 @@ def _(event):
     event.current_buffer.insert_text("\n")
 
 
-def banner(model: str, agent: bool) -> None:
+def chat_header(model: str, agent: bool) -> None:
     agent_badge = " [bold yellow]· AGENT[/]" if agent else ""
-    console.print()
-    console.print(Panel(
-        Text.from_markup(
-            "[bold cyan]✻[/] [bold]AI Runner[/]  [dim]·[/]  "
-            f"[white]{model}[/]{agent_badge}\n\n"
-            "[dim]/help for commands   /clear to clear   "
-            "/new new chat   /exit to quit[/]\n"
-            "[dim]Shift+Enter newline · Ctrl+C cancel · Ctrl+D exit[/]"
-        ),
-        border_style="dim cyan",
-        padding=(0, 2),
-    ))
+    console.print(
+        f"[bold cyan]✻[/] [bold]DeepSeek[/]  [dim]·[/]  "
+        f"[white]{model}[/]{agent_badge}  "
+        f"[dim]·  /help for commands  ·  /exit to quit[/]"
+    )
     console.print()
 
 
@@ -689,7 +680,8 @@ def main() -> int:
         cfg.model = os.environ["DEEPSEEK_MODEL"]
 
     conv = Conversation()
-    banner(cfg.model, cfg.agent_mode)
+    if not QUIET:
+        chat_header(cfg.model, cfg.agent_mode)
 
     completer = WordCompleter(
         ["/help", "/new", "/clear", "/model", "/system", "/agent",
@@ -731,7 +723,8 @@ def main() -> int:
             elif cmd == "/help":
                 help_panel()
             elif cmd == "/clear":
-                console.clear(); banner(cfg.model, cfg.agent_mode)
+                console.clear()
+                chat_header(cfg.model, cfg.agent_mode)
             elif cmd == "/new":
                 conv = Conversation()
                 console.print("[dim]· new conversation[/]")
@@ -742,7 +735,6 @@ def main() -> int:
                 elif args[0] in MODELS:
                     cfg.model = args[0]; cfg.save()
                     console.print(f"[green]→ model set to[/] {args[0]}")
-                    banner(cfg.model, cfg.agent_mode)
                 else:
                     console.print(f"[red]unknown model: {args[0]}[/]")
             elif cmd == "/system":
@@ -761,7 +753,6 @@ def main() -> int:
                 cfg.agent_mode = not cfg.agent_mode; cfg.save()
                 state = "[green]ON[/]" if cfg.agent_mode else "[red]OFF[/]"
                 console.print(f"→ agent mode: {state}")
-                banner(cfg.model, cfg.agent_mode)
             elif cmd == "/save":
                 name = args[0] if args else f"chat-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
                 try:
@@ -935,27 +926,44 @@ cmd_version() {
 }
 
 # ============================================================================
-#  MAIN — banner, setup, straight to chat
+#  MAIN — banner, setup, clear, chat
 # ============================================================================
 main() {
-  print_banner
-
   case "${1:-chat}" in
-    ask)     shift; ensure_env; ensure_key; cmd_ask "$@" ;;
-    health)  ensure_env; ensure_key; cmd_health ;;
-    config)  cmd_config ;;
-    version) cmd_version ;;
+    ask)
+      shift
+      ensure_env; ensure_key
+      cmd_ask "$@"
+      ;;
+    health)
+      ensure_env; ensure_key
+      cmd_health
+      ;;
+    config)
+      cmd_config
+      ;;
+    version)
+      cmd_version
+      ;;
     chat|tui|"")
+      # 1. setup phase — visible output while installing
       ensure_env
       ensure_key
       section "Preparing runner"
       write_tools
       write_tui
       ok "runner ready"
-      echo
-      # small delay so user sees setup finished
+
+      # 2. clear screen, show only banner
       sleep 0.15
+      clear
+      print_banner
+
+      # 3. hand off to chat (skips the Rich header via AI_RUNNER_QUIET)
+      export AI_RUNNER_QUIET=1
       cmd_tui
+
+      # 4. after chat exits
       echo
       section "Chat closed"
       printf '%s  goodbye · %s%s\n' "$DM" "$REPO_URL" "$RS"
