@@ -12,18 +12,12 @@ PY_APP="${APP_DIR}/app.py"
 
 # ---------- ANSI palette ----------
 if [[ -t 1 ]]; then
-  B1=$'\e[38;5;33m'    # deep blue
-  B2=$'\e[38;5;39m'    # bright blue
-  B3=$'\e[38;5;45m'    # cyan-blue
-  B4=$'\e[38;5;51m'    # aqua
-  BD=$'\e[1m'
-  DM=$'\e[2m'
-  RS=$'\e[0m'
+  B1=$'\e[38;5;33m'; B2=$'\e[38;5;39m'; B3=$'\e[38;5;45m'; B4=$'\e[38;5;51m'
+  BD=$'\e[1m'; DM=$'\e[2m'; RS=$'\e[0m'
 else
   B1= B2= B3= B4= BD= DM= RS=
 fi
 
-# ---------- Banner (aligned + gradient) ----------
 print_banner() {
   local lines=(
 '▄▄▄     ▓██   ██▓ ██░ ██  ▄▄▄       ███▄    █ ▒██   ██▒ ▄▄▄        ▄████ ▓█████  ███▄    █ ▄▄▄█████▓'
@@ -42,30 +36,80 @@ print_banner() {
     printf '%s%s%s\n' "${BD}${colors[$i]}" "${lines[$i]}" "$RS"
   done
   printf '%-100s\n' | sed 's/ /─/g' | sed "s/^/${DM}${B2}/; s/$/${RS}/"
-  printf '  %s%sAI Platform%s   %s·%s   %sDeepSeek Chat + Agent%s   %s·%s   %sv1.0%s\n\n' \
+  printf '  %s%sAI Platform%s   %s·%s   %sDeepSeek Chat + Agent%s   %s·%s   %sv1.1%s\n\n' \
     "$BD" "$B4" "$RS" "$DM" "$RS" "$BD" "$RS" "$DM" "$RS" "$DM" "$RS"
 }
 
-# ---------- Small helpers ----------
 section() { printf '%s%s▸ %s%s\n' "$BD" "$B3" "$*" "$RS"; }
 ok()      { printf '%s  ✓%s %s\n' "$B4" "$RS" "$*"; }
 warn()    { printf '%s  !%s %s\n' "$B3" "$RS" "$*"; }
 err()     { printf '%s  ✗%s %s\n' "$B1" "$RS" "$*" >&2; }
 
-# ---------- Run ----------
 print_banner
 
+# ---------- Find a compatible Python ----------
+# Python 3.13+ may lack wheels for pydantic-core / uvicorn — prefer 3.10–3.12.
 section "Checking environment"
-command -v python3 >/dev/null || { err "python3 not found"; exit 1; }
-ok "python3 $(python3 -c 'import sys;print(".".join(map(str,sys.version_info[:2])))')"
+
+find_python() {
+  local candidates=(python3.12 python3.11 python3.10 python3)
+  for cand in "${candidates[@]}"; do
+    if command -v "$cand" >/dev/null 2>&1; then
+      local ver
+      ver=$("$cand" -c 'import sys;print("{}.{}".format(*sys.version_info[:2]))' 2>/dev/null || echo "0.0")
+      local major="${ver%.*}" minor="${ver#*.}"
+      if (( major == 3 && minor >= 10 && minor <= 12 )); then
+        echo "$cand"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+if ! PYTHON_BIN="$(find_python)"; then
+  err "No compatible Python found (need 3.10, 3.11 or 3.12)."
+  err "Your system has:"
+  for c in python3.12 python3.11 python3.10 python3; do
+    command -v "$c" >/dev/null 2>&1 && \
+      printf '    %s  →  %s\n' "$c" "$("$c" --version 2>&1)" >&2
+  done
+  echo
+  warn "Install one of these and re-run:"
+  printf '    Debian/Ubuntu:  %sapt install python3.11 python3.11-venv%s\n' "$DM" "$RS" >&2
+  printf '    Arch:           %spacman -S python311%s\n' "$DM" "$RS" >&2
+  printf '    Fedora:         %ssudo dnf install python3.11%s\n' "$DM" "$RS" >&2
+  exit 1
+fi
+ok "$PYTHON_BIN → $("$PYTHON_BIN" --version 2>&1)"
 
 # ---------- venv ----------
+# If the existing venv is broken or was built with an incompatible python, rebuild.
+needs_rebuild=0
 if [[ ! -d "$VENV" ]]; then
-  section "First run · creating virtualenv"
+  needs_rebuild=1
+elif [[ ! -x "$VENV/bin/python" ]]; then
+  needs_rebuild=1
+elif ! "$VENV/bin/python" -c 'import sys; assert (3,10) <= sys.version_info[:2] <= (3,12)' 2>/dev/null; then
+  warn "existing venv uses incompatible python → rebuilding"
+  needs_rebuild=1
+elif ! "$VENV/bin/python" -c 'import uvicorn, fastapi, httpx, pydantic' 2>/dev/null; then
+  warn "existing venv is missing packages → rebuilding"
+  needs_rebuild=1
+fi
+
+if (( needs_rebuild )); then
+  section "Setting up virtualenv"
+  rm -rf "$VENV"
   mkdir -p "$APP_DIR"
-  python3 -m venv "$VENV"
-  "$VENV/bin/pip" install --quiet --upgrade pip
-  "$VENV/bin/pip" install --quiet fastapi "uvicorn[standard]" httpx pydantic
+  "$PYTHON_BIN" -m venv "$VENV"
+  "$VENV/bin/pip" install --upgrade pip
+
+  echo "  ${DM}installing fastapi uvicorn httpx pydantic …${RS}"
+  if ! "$VENV/bin/pip" install fastapi "uvicorn[standard]" httpx pydantic; then
+    err "pip install failed — see output above"
+    exit 1
+  fi
   ok "dependencies installed"
 else
   ok "virtualenv ready"
@@ -87,7 +131,7 @@ else
   ok "API key loaded"
 fi
 
-# ---------- Write app.py ----------
+# ---------- Write app.py (unchanged) ----------
 section "Writing backend"
 
 cat > "$PY_APP" <<'PYEOF'
@@ -112,7 +156,6 @@ DB_PATH = Path(os.environ.get("DB_PATH", Path.home() / ".ai_platform" / "chats.d
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
-# ---------- Database ----------
 def db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -140,7 +183,6 @@ def init_db() -> None:
         )
 
 
-# ---------- Agent tools ----------
 TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
@@ -212,7 +254,6 @@ TOOL_IMPL = {
 }
 
 
-# ---------- DeepSeek client ----------
 async def deepseek_chat(messages, tools=None, stream=False):
     payload: dict[str, Any] = {"model": MODEL, "messages": messages, "stream": stream}
     if tools:
@@ -251,7 +292,6 @@ async def deepseek_chat(messages, tools=None, stream=False):
         await client.aclose()
 
 
-# ---------- FastAPI ----------
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
@@ -391,7 +431,6 @@ def health():
     return {"ok": True, "model": MODEL}
 
 
-# ---------- Frontend ----------
 HTML = r"""<!doctype html>
 <html lang="en">
 <head>
@@ -615,12 +654,24 @@ PYEOF
 chmod 600 "$PY_APP"
 ok "backend written to $PY_APP"
 
+# ---------- Final sanity check ----------
+section "Verifying installation"
+if [[ ! -x "$VENV/bin/uvicorn" ]]; then
+  err "uvicorn binary missing at $VENV/bin/uvicorn — installation failed"
+  exit 1
+fi
+if ! "$VENV/bin/python" -c 'import uvicorn, fastapi, httpx, pydantic' 2>/dev/null; then
+  err "python packages are not importable — venv is broken"
+  exit 1
+fi
+ok "all packages importable"
+
 # ---------- Launch ----------
 section "Starting server"
+LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 printf '%s  →%s http://localhost:%s%s\n' "$B4" "$RS" "$PORT" "$RS"
-printf '%s  →%s http://%s:%s%s   (LAN)%s\n' \
-  "$B4" "$RS" "$(hostname -I 2>/dev/null | awk '{print $1}' || echo localhost)" \
-  "$PORT" "$DM" "$RS"
+[[ -n "$LAN_IP" ]] && printf '%s  →%s http://%s:%s%s   (LAN)%s\n' \
+  "$B4" "$RS" "$LAN_IP" "$PORT" "$DM" "$RS"
 printf '%s  stop with Ctrl+C%s\n\n' "$DM" "$RS"
 
 export DEEPSEEK_API_KEY
