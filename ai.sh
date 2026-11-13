@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 # ============================================================================
-#   AyhanX-Agent · premium terminal client for DeepSeek & OpenRouter
+#   AyhanX-Agent · premium terminal client for DeepSeek, OpenRouter, Groq & local
 #   Repository:  https://github.com/AyhanMansur/AyhanX-Agent
-#   Version:     3.3.0
+#   Version:     3.4.0
 #
 #   Usage:
-#     ./ai.sh                          chat (auto-detects provider from key)
-#     ./ai.sh --provider openrouter    force OpenRouter
-#     ./ai.sh --provider deepseek      force DeepSeek
-#     ./ai.sh ask "prompt"             one-shot answer
-#     ./ai.sh health                   check the API connection
-#     ./ai.sh config                   show file locations
-#     ./ai.sh version                  print version
+#     ./ai.sh                              chat (auto-detect provider)
+#     ./ai.sh --provider ollama            force Ollama
+#     ./ai.sh --provider lmstudio          force LM Studio
+#     ./ai.sh --provider vllm              force vLLM
+#     ./ai.sh --provider llamacpp          force llama.cpp
+#     ./ai.sh --provider localai           force LocalAI
+#     ./ai.sh --provider openrouter        force OpenRouter
+#     ./ai.sh --provider groq              force Groq
+#     ./ai.sh --provider auto              auto-detect local server
+#     ./ai.sh ask "prompt"                 one-shot answer
+#     ./ai.sh health                       check the API connection
+#     ./ai.sh config                       show file locations
+#     ./ai.sh version                      print version
 # ============================================================================
 set -euo pipefail
 
-VERSION="3.3.0"
+VERSION="3.4.0"
 REPO_URL="https://github.com/AyhanMansur/AyhanX-Agent"
 APP_DIR="${HOME}/.ai_platform"
 VENV="${APP_DIR}/.venv"
@@ -50,17 +56,31 @@ trap cleanup EXIT INT TERM
 # ============================================================================
 #  PROVIDER HELPERS
 # ============================================================================
+is_local_provider() {
+  case "$1" in
+    ollama|lmstudio|vllm|llamacpp|localai) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 provider_of_key() {
   case "${1:-}" in
-    sk-or-*) echo "openrouter" ;;
-    sk-*)    echo "deepseek" ;;
-    *)       echo "" ;;
+    sk-or-*)  echo "openrouter" ;;
+    gsk_*)    echo "groq" ;;
+    sk-*)     echo "deepseek" ;;
+    *)        echo "" ;;
   esac
 }
 
 provider_url() {
   case "$1" in
     openrouter) echo "https://openrouter.ai/api/v1" ;;
+    groq)       echo "https://api.groq.com/openai/v1" ;;
+    ollama)     echo "${OLLAMA_URL:-http://localhost:11434/v1}" ;;
+    lmstudio)   echo "${LMSTUDIO_URL:-http://localhost:1234/v1}" ;;
+    vllm)       echo "${VLLM_URL:-http://localhost:8000/v1}" ;;
+    llamacpp)   echo "${LLAMACPP_URL:-http://localhost:8080/v1}" ;;
+    localai)    echo "${LOCALAI_URL:-http://localhost:8080/v1}" ;;
     *)          echo "https://api.deepseek.com" ;;
   esac
 }
@@ -68,6 +88,12 @@ provider_url() {
 provider_default_model() {
   case "$1" in
     openrouter) echo "deepseek/deepseek-chat" ;;
+    groq)       echo "llama-3.3-70b-versatile" ;;
+    ollama)     echo "qwen2.5:3b" ;;
+    lmstudio)   echo "local-model" ;;
+    vllm)       echo "local-model" ;;
+    llamacpp)   echo "local-model" ;;
+    localai)    echo "local-model" ;;
     *)          echo "deepseek-chat" ;;
   esac
 }
@@ -75,8 +101,41 @@ provider_default_model() {
 provider_label() {
   case "$1" in
     openrouter) echo "OpenRouter" ;;
+    groq)       echo "Groq" ;;
+    ollama)     echo "Ollama" ;;
+    lmstudio)   echo "LM Studio" ;;
+    vllm)       echo "vLLM" ;;
+    llamacpp)   echo "llama.cpp" ;;
+    localai)    echo "LocalAI" ;;
     *)          echo "DeepSeek" ;;
   esac
+}
+
+# Probe a URL for an OpenAI-compatible /models endpoint
+probe_local() {
+  local url="$1"
+  timeout 2 curl -sSf -H "Authorization: Bearer local" \
+    "${url%/}/models" 2>/dev/null | grep -q '"id"'
+}
+
+# Try common local server ports; return first that responds
+detect_local() {
+  local pair name url
+  for pair in \
+    "ollama:${OLLAMA_URL:-http://localhost:11434/v1}" \
+    "lmstudio:${LMSTUDIO_URL:-http://localhost:1234/v1}" \
+    "vllm:${VLLM_URL:-http://localhost:8000/v1}" \
+    "llamacpp:${LLAMACPP_URL:-http://localhost:8080/v1}" \
+    "localai:${LOCALAI_URL:-http://localhost:8080/v1}"
+  do
+    name="${pair%%:*}"
+    url="${pair#*:}"
+    if probe_local "$url"; then
+      echo "$name"
+      return 0
+    fi
+  done
+  return 1
 }
 
 # ============================================================================
@@ -259,37 +318,34 @@ ensure_key() {
     set -o allexport; . "$ENV_FILE"; set +o allexport
   fi
 
-  if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
-    warn "no API key found"
-    printf '  %s›%s paste your key %s(sk-… for DeepSeek · sk-or-… for OpenRouter)%s: ' \
-      "$PK" "$RS" "$MT" "$RS"
-    read -r -s DEEPSEEK_API_KEY || true
-    echo
-    if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then err "a key is required"; exit 1; fi
-    printf 'DEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" > "$ENV_FILE"
-    chmod 600 "$ENV_FILE"
-    ok "key saved"
-  else
-    ok "key loaded"
-  fi
-
-  # ---- provider resolution ----
-  #   1. AYHANX_PROVIDER env (explicit override)
-  #   2. DEEPSEEK_BASE_URL env (infer from URL)
-  #   3. key prefix (most reliable)
-  #   4. saved PROVIDER_FILE
-  #   5. default: deepseek
+  # ---- resolve provider first (before asking for any key) ----
   local provider=""
-  if [[ -n "${AYHANX_PROVIDER:-}" ]]; then
+  if [[ -n "${AYHANX_PROVIDER:-}" && "${AYHANX_PROVIDER}" != "auto" ]]; then
     provider="$AYHANX_PROVIDER"
   elif [[ -n "${DEEPSEEK_BASE_URL:-}" ]]; then
     case "$DEEPSEEK_BASE_URL" in
-      *openrouter*) provider="openrouter" ;;
-      *deepseek*)   provider="deepseek" ;;
+      *openrouter*)          provider="openrouter" ;;
+      *groq*)                provider="groq" ;;
+      *:11434*)              provider="ollama" ;;
+      *:1234*)               provider="lmstudio" ;;
+      *:8000*)               provider="vllm" ;;
+      *:8080*)               provider="llamacpp" ;;
+      *deepseek*)            provider="deepseek" ;;
     esac
   fi
+
+  # ---- auto-detect a running local server ----
+  if [[ -z "$provider" || "${AYHANX_PROVIDER:-}" == "auto" ]]; then
+    local detected=""
+    if detected="$(detect_local)"; then
+      provider="$detected"
+      ok "detected local server → $(provider_label "$provider")"
+    fi
+  fi
+
+  # ---- infer from key, provider file, or default ----
   if [[ -z "$provider" ]]; then
-    provider="$(provider_of_key "$DEEPSEEK_API_KEY")"
+    provider="$(provider_of_key "${DEEPSEEK_API_KEY:-}")"
   fi
   if [[ -z "$provider" && -f "$PROVIDER_FILE" ]]; then
     provider="$(cat "$PROVIDER_FILE" 2>/dev/null || echo "")"
@@ -298,8 +354,28 @@ ensure_key() {
     provider="deepseek"
   fi
 
+  # ---- obtain key only when needed ----
+  if is_local_provider "$provider"; then
+    DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-local}"
+    ok "local provider — no API key required"
+  else
+    if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+      warn "no API key found for $(provider_label "$provider")"
+      printf '  %s›%s paste your key %s: ' "$PK" "$RS" "$MT"
+      read -r -s DEEPSEEK_API_KEY || true
+      echo
+      if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then err "a key is required"; exit 1; fi
+      printf 'DEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" > "$ENV_FILE"
+      chmod 600 "$ENV_FILE"
+      ok "key saved"
+    else
+      ok "key loaded"
+    fi
+  fi
+
   printf '%s\n' "$provider" > "$PROVIDER_FILE"
   export AYHANX_PROVIDER="$provider"
+  export DEEPSEEK_API_KEY
   export DEEPSEEK_BASE_URL="${DEEPSEEK_BASE_URL:-$(provider_url "$provider")}"
   export DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-$(provider_default_model "$provider")}"
 
@@ -309,7 +385,7 @@ ensure_key() {
 }
 
 # ============================================================================
-#  GENERATE: runner/tools.py  (unchanged)
+#  GENERATE: runner/tools.py (unchanged)
 # ============================================================================
 write_tools() {
   mkdir -p "$RUNNER_DIR"
@@ -470,11 +546,11 @@ PYEOF
 }
 
 # ============================================================================
-#  GENERATE: runner/tui.py  (now provider-aware)
+#  GENERATE: runner/tui.py (now local-aware)
 # ============================================================================
 write_tui() {
   cat > "$RUNNER_DIR/tui.py" <<'PYEOF'
-"""AyhanX-Agent — premium terminal chat for DeepSeek & OpenRouter."""
+"""AyhanX-Agent — premium terminal chat for cloud & local providers."""
 import html
 import json
 import os
@@ -501,7 +577,7 @@ from rich.text import Text
 
 from .tools import TOOL_IMPLS, TOOL_SPECS
 
-VERSION = os.environ.get("AI_RUNNER_VERSION", "3.3.0")
+VERSION = os.environ.get("AI_RUNNER_VERSION", "3.4.0")
 APP_DIR = Path(os.environ.get("APP_DIR", Path.home() / ".ai_platform"))
 CONFIG_PATH = APP_DIR / "config.json"
 HISTORY_PATH = APP_DIR / "history.txt"
@@ -509,8 +585,19 @@ CHATS_DIR = APP_DIR / "chats"
 CHATS_DIR.mkdir(parents=True, exist_ok=True)
 
 PROVIDER = os.environ.get("AYHANX_PROVIDER", "deepseek")
-PROVIDER_LABEL = {"deepseek": "DeepSeek", "openrouter": "OpenRouter"}.get(
-    PROVIDER, PROVIDER)
+PROVIDER_LABEL = {
+    "deepseek": "DeepSeek",
+    "openrouter": "OpenRouter",
+    "groq": "Groq",
+    "ollama": "Ollama",
+    "lmstudio": "LM Studio",
+    "vllm": "vLLM",
+    "llamacpp": "llama.cpp",
+    "localai": "LocalAI",
+}.get(PROVIDER, PROVIDER)
+
+LOCAL_PROVIDERS = {"ollama", "lmstudio", "vllm", "llamacpp", "localai"}
+IS_LOCAL = PROVIDER in LOCAL_PROVIDERS
 
 PROVIDER_MODELS = {
     "deepseek": ["deepseek-chat", "deepseek-reasoner"],
@@ -518,7 +605,6 @@ PROVIDER_MODELS = {
         "deepseek/deepseek-chat",
         "deepseek/deepseek-chat-v3-0324:free",
         "deepseek/deepseek-r1:free",
-        "deepseek/deepseek-r1-distill-llama-70b:free",
         "meta-llama/llama-3.3-70b-instruct:free",
         "google/gemini-2.0-flash-exp:free",
         "qwen/qwen-2.5-72b-instruct:free",
@@ -526,9 +612,57 @@ PROVIDER_MODELS = {
         "microsoft/phi-4:free",
         "anthropic/claude-3.5-sonnet",
     ],
+    "groq": [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it",
+        "qwen-2.5-32b",
+    ],
+    # local providers are populated dynamically via /models
+    "ollama": [],
+    "lmstudio": [],
+    "vllm": [],
+    "llamacpp": [],
+    "localai": [],
 }
 MODELS = PROVIDER_MODELS.get(PROVIDER, PROVIDER_MODELS["deepseek"])
 START = os.environ.get("AYHANX_START", "new")
+
+
+def fetch_server_models(base_url: str, api_key: str) -> list:
+    """GET {base}/models — returns list of model ids."""
+    headers = {"Authorization": f"Bearer {api_key}"}
+    if PROVIDER == "openrouter":
+        headers["HTTP-Referer"] = "https://github.com/AyhanMansur/AyhanX-Agent"
+        headers["X-Title"] = "AyhanX-Agent"
+    try:
+        r = httpx.get(f"{base_url.rstrip('/')}/models", headers=headers, timeout=6)
+        if r.status_code == 200:
+            return [m["id"] for m in r.json().get("data", [])]
+    except Exception:
+        pass
+    return []
+
+
+def refresh_local_models(cfg) -> list:
+    """For local providers, fetch models from the server and remember them."""
+    if not IS_LOCAL:
+        return []
+    base = os.environ.get("DEEPSEEK_BASE_URL", "")
+    key = os.environ.get("DEEPSEEK_API_KEY", "local")
+    ids = fetch_server_models(base, key)
+    if ids:
+        # persist so /model list survives a restart
+        for m in ids:
+            if m not in cfg.custom_models and m not in MODELS:
+                cfg.custom_models.append(m)
+        cfg.save()
+        # if current model isn't in the server, switch to the first one
+        if cfg.model not in ids:
+            cfg.model = ids[0]
+            cfg.save()
+    return ids
 
 
 def all_models(cfg) -> list:
@@ -639,6 +773,8 @@ class DeepSeekClient:
             return ""
         if self.provider == "openrouter":
             return base + " — openrouter.ai/keys"
+        if self.provider in LOCAL_PROVIDERS:
+            return base + " — is the local server running?"
         return base + " — platform.deepseek.com/api_keys"
 
     def _error(self, status: int, body: str) -> str:
@@ -726,7 +862,11 @@ def mode_chip(agent: bool) -> Text:
 
 
 def provider_chip() -> Text:
-    return Text(f" {PROVIDER_LABEL} ", style=f"bold #0a0f1c on {CYAN}")
+    label = f" {PROVIDER_LABEL} "
+    if IS_LOCAL:
+        # warm amber for local, cyan for cloud
+        return Text(label, style="bold #1c1600 on #fbbf24")
+    return Text(label, style=f"bold #0a0f1c on {CYAN}")
 
 
 def show_header(cfg: Config) -> None:
@@ -786,6 +926,7 @@ def help_panel() -> None:
         ("/new", "start a new conversation"),
         ("/clear", "clear the screen"),
         ("/model [name]", "show or switch the model"),
+        ("/model refresh", "re-fetch models from server (local only)"),
         ("/model add <name>", "add a model to the list"),
         ("/system [text]", "show or set the system prompt"),
         ("/agent", "toggle agent mode (tools)"),
@@ -818,6 +959,7 @@ def info_panel(cfg: Config, conv: Conversation) -> None:
     t.add_column(style=f"bold {VIOLET}", no_wrap=True)
     t.add_column(style=TEXT)
     t.add_row("provider", PROVIDER_LABEL)
+    t.add_row("endpoint", os.environ.get("DEEPSEEK_BASE_URL", "?"))
     t.add_row("model", cfg.model)
     t.add_row("mode", "agent" if cfg.agent_mode else "chat")
     t.add_row("system prompt", "set" if cfg.system_prompt else "none")
@@ -892,8 +1034,9 @@ PROMPT_STYLE = Style.from_dict({
 def toolbar(cfg: Config, conv: Conversation) -> HTML:
     mode = ('<style fg="#fbbf24"><b>AGENT</b></style>' if cfg.agent_mode
             else '<style fg="#34d399"><b>CHAT</b></style>')
+    prov_fg = "#fbbf24" if IS_LOCAL else "#5eead4"
     return HTML(
-        f' <style fg="#5eead4"><b>{html.escape(PROVIDER_LABEL)}</b></style>'
+        f' <style fg="{prov_fg}"><b>{html.escape(PROVIDER_LABEL)}</b></style>'
         f'  ·  <style fg="#a78bfa"><b>{html.escape(cfg.model)}</b></style>'
         f'  ·  {mode}  ·  {len(conv.messages)} msgs'
         f'    <style fg="#64748b">/help · Enter send · Esc+Enter newline · Ctrl+D exit</style>'
@@ -1000,18 +1143,32 @@ COMMANDS = ["/help", "/new", "/clear", "/model", "/system", "/agent",
 
 
 def main() -> int:
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
+    api_key = os.environ.get("DEEPSEEK_API_KEY", "local" if IS_LOCAL else "")
+    if not api_key and not IS_LOCAL:
         console.print(error_panel("DEEPSEEK_API_KEY is not set"))
         return 1
 
     base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     cfg = Config.load()
-    # if this is the first run for this provider, seed the model
+
+    # seed a sensible default model per provider
     if os.environ.get("DEEPSEEK_MODEL"):
         cfg.model = os.environ["DEEPSEEK_MODEL"]
     elif cfg.model not in MODELS and cfg.model not in cfg.custom_models:
-        cfg.model = MODELS[0]
+        cfg.model = MODELS[0] if MODELS else "local-model"
+
+    # for local providers, try to fetch the live model list once at start
+    if IS_LOCAL:
+        with console.status(Text(f" querying {PROVIDER_LABEL}…", style=MUTED),
+                            spinner="dots", spinner_style=VIOLET):
+            ids = refresh_local_models(cfg)
+        if not ids:
+            notice(f"could not reach {PROVIDER_LABEL} at {base_url}", RED)
+            notice(f"is it running? start it and retry, or use /model refresh", MUTED)
+        elif cfg.model not in ids:
+            # keep provider default if the server exposes it, else pick first
+            cfg.model = ids[0]
+            cfg.save()
 
     conv = Conversation()
     show_header(cfg)
@@ -1063,8 +1220,23 @@ def main() -> int:
                 conv = Conversation()
                 notice("new conversation started")
             elif cmd == "/model":
+                if args and args[0].lower() == "refresh":
+                    if not IS_LOCAL:
+                        notice("refresh is only available for local providers", RED)
+                        continue
+                    with console.status(Text(f" querying {PROVIDER_LABEL}…", style=MUTED),
+                                        spinner="dots", spinner_style=VIOLET):
+                        ids = refresh_local_models(cfg)
+                    if ids:
+                        notice(f"refreshed · {len(ids)} models from {PROVIDER_LABEL}")
+                    else:
+                        notice("no models returned by server", RED)
+                    continue
                 models = all_models(cfg)
                 if not args:
+                    if not models:
+                        notice("no models available — try /model refresh", MUTED)
+                        continue
                     chips = Text.assemble(*[
                         (" " + m + " " + ("◆" if m == cfg.model else " ") + "  ",
                          f"bold #0f0a1f on {VIOLET}" if m == cfg.model else f"{SOFT}")
@@ -1080,7 +1252,7 @@ def main() -> int:
                             cfg.custom_models.append(name)
                             cfg.save()
                         notice(f"model added: {name}  ·  switch with /model {name}")
-                elif args[0] in models:
+                elif args[0] in models or IS_LOCAL:
                     cfg.model = args[0]
                     cfg.save()
                     notice(f"model → {args[0]}")
@@ -1229,7 +1401,7 @@ import httpx
 p = sys.argv[1]
 provider = os.environ.get("AYHANX_PROVIDER", "deepseek")
 base = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
-headers = {"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
+headers = {"Authorization": f"Bearer {os.environ.get('DEEPSEEK_API_KEY', 'local')}",
            "Content-Type": "application/json"}
 if provider == "openrouter":
     headers["HTTP-Referer"] = "https://github.com/AyhanMansur/AyhanX-Agent"
@@ -1245,6 +1417,8 @@ if r.status_code >= 400:
         msg = r.text
     hints = {401: "invalid key", 402: "no balance", 429: "rate limited"}
     hint = hints.get(r.status_code, "")
+    if provider in ("ollama", "lmstudio", "vllm", "llamacpp", "localai"):
+        hint = "is the local server running?"
     print(f"HTTP {r.status_code}: {msg}" + (f" ({hint})" if hint else ""),
           file=sys.stderr)
     sys.exit(1)
@@ -1260,7 +1434,7 @@ import httpx
 provider = os.environ.get("AYHANX_PROVIDER", "deepseek")
 base = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
 model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-headers = {"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
+headers = {"Authorization": f"Bearer {os.environ.get('DEEPSEEK_API_KEY', 'local')}",
            "Content-Type": "application/json"}
 if provider == "openrouter":
     headers["HTTP-Referer"] = "https://github.com/AyhanMansur/AyhanX-Agent"
@@ -1270,6 +1444,18 @@ print(f"  {M}provider{N}  {provider}")
 print(f"  {M}endpoint{N}  {base}")
 print(f"  {M}model{N}     {model}")
 try:
+    # for local providers, list available models
+    if provider in ("ollama", "lmstudio", "vllm", "llamacpp", "localai"):
+        try:
+            mr = httpx.get(f"{base}/models", headers=headers, timeout=10)
+            if mr.status_code == 200:
+                ids = [m["id"] for m in mr.json().get("data", [])]
+                if ids:
+                    preview = ", ".join(ids[:4])
+                    more = f" … (+{len(ids) - 4})" if len(ids) > 4 else ""
+                    print(f"  {M}models{N}    {preview}{more}")
+        except Exception:
+            pass
     r = httpx.post(f"{base}/chat/completions", headers=headers, timeout=30,
                    json={"model": model, "max_tokens": 5,
                          "messages": [{"role": "user", "content": "say OK"}]})
@@ -1282,13 +1468,16 @@ try:
         print(f"  {M}body{N}      {r.text[:300]}")
         print(f"  {R}✘ failed{N}")
 except Exception as e:
-    print(f"  {R}✘ {type(e).__name__}: {e}{N}")
+    hint = ""
+    if provider in ("ollama", "lmstudio", "vllm", "llamacpp", "localai"):
+        hint = "  → is the server running?"
+    print(f"  {R}✘ {type(e).__name__}: {e}{N}{hint}")
 PY
 }
 
 cmd_config() {
   section "Files"
-  info "provider ${AYHANX_PROVIDER:-deepseek}  (override: AYHANX_PROVIDER=openrouter $0)"
+  info "provider ${AYHANX_PROVIDER:-deepseek}  (override: --provider NAME)"
   info "config   $CONFIG_FILE"
   info "env      $ENV_FILE"
   info "provider $PROVIDER_FILE"
@@ -1320,14 +1509,14 @@ cmd_version() {
 main() {
   mkdir -p "$APP_DIR"
 
-  # ---- parse --provider flag anywhere before the subcommand ----
+  # ---- parse --provider flag ----
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --provider) shift; export AYHANX_PROVIDER="${1:-}"; shift || break ;;
+      --provider)   shift; export AYHANX_PROVIDER="${1:-}"; shift || break ;;
       --provider=*) export AYHANX_PROVIDER="${1#*=}"; shift ;;
-      --) shift; break ;;
+      --)           shift; break ;;
       ask|health|config|version|chat|tui) break ;;
-      *) break ;;
+      *)            break ;;
     esac
   done
 
@@ -1362,7 +1551,7 @@ main() {
       ;;
     *)
       err "unknown mode: $1"
-      info "usage: $0 [--provider deepseek|openrouter] [chat|ask|health|config|version]"
+      info "usage: $0 [--provider deepseek|openrouter|groq|ollama|lmstudio|vllm|llamacpp|localai|auto] [chat|ask|health|config|version]"
       exit 1
       ;;
   esac
