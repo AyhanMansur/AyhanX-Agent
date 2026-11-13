@@ -1,7 +1,7 @@
 # ============================================================================
 #   AyhanX-Agent · Windows PowerShell client for DeepSeek, OpenRouter & local
 #   Repository:  https://github.com/AyhanMansur/AyhanX-Agent
-#   Version:     3.4.0-windows
+#   Version:     3.4.1-windows
 #
 #   Usage:
 #     .\ai.ps1                            chat (auto-detect provider)
@@ -20,13 +20,13 @@ param(
     [Parameter(Position=0)]
     [string]$Command = "chat",
     [Parameter(Position=1, ValueFromRemainingArguments=$true)]
-    [string[]]$Args,
+    [string[]]$Rest,
     [string]$Provider = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-$VERSION      = "3.4.0-windows"
+$VERSION      = "3.4.1-windows"
 $REPO_URL     = "https://github.com/AyhanMansur/AyhanX-Agent"
 $APP_DIR      = Join-Path $env:USERPROFILE ".ai_platform"
 $VENV         = Join-Path $APP_DIR ".venv"
@@ -235,7 +235,6 @@ function Find-Python {
 }
 
 function Install-Python {
-    # 1) try winget
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-Info "trying winget..."
         try {
@@ -244,7 +243,6 @@ function Install-Python {
                 Out-File -FilePath $LOG_FILE -Append -Encoding UTF8
             if ($LASTEXITCODE -eq 0) {
                 Write-Ok "installed via winget"
-                # refresh PATH
                 $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
                             [Environment]::GetEnvironmentVariable("PATH", "User")
                 return $true
@@ -253,7 +251,6 @@ function Install-Python {
             Write-Info "winget failed, falling back to direct download"
         }
     }
-    # 2) download installer
     $url = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
     $tmp = Join-Path $env:TEMP "python-3.12.7-amd64.exe"
     try {
@@ -396,7 +393,6 @@ function Initialize-Credentials {
     Write-Section "Credentials"
     Read-EnvFile
 
-    # ---- resolve provider ----
     $prov = ""
     if ($env:AYHANX_PROVIDER -and $env:AYHANX_PROVIDER -ne "auto") {
         $prov = $env:AYHANX_PROVIDER
@@ -425,7 +421,6 @@ function Initialize-Credentials {
     }
     if (-not $prov) { $prov = "deepseek" }
 
-    # ---- key ----
     if (Test-LocalProvider $prov) {
         if (-not $env:DEEPSEEK_API_KEY) { $env:DEEPSEEK_API_KEY = "local" }
         Write-Ok "local provider — no API key required"
@@ -618,7 +613,7 @@ TOOL_IMPLS = {
 }
 
 # ============================================================================
-#  GENERATE: runner\tui.py  (full parity with bash version)
+#  GENERATE: runner\tui.py
 # ============================================================================
 function Write-Tui {
     $content = @'
@@ -649,7 +644,7 @@ from rich.text import Text
 
 from .tools import TOOL_IMPLS, TOOL_SPECS
 
-VERSION = os.environ.get("AI_RUNNER_VERSION", "3.4.0-windows")
+VERSION = os.environ.get("AI_RUNNER_VERSION", "3.4.1-windows")
 APP_DIR = Path(os.environ.get("APP_DIR", Path.home() / ".ai_platform"))
 CONFIG_PATH = APP_DIR / "config.json"
 HISTORY_PATH = APP_DIR / "history.txt"
@@ -1365,7 +1360,7 @@ function Main {
         "ask" {
             Initialize-Environment
             Initialize-Credentials
-            Invoke-Ask ($Args -join " ")
+            Invoke-Ask ($Rest -join " ")
         }
         "health" {
             Initialize-Environment
