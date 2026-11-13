@@ -1,16 +1,17 @@
 
 <div align="center">
-<img width="1856" height="930" alt="AyhanX-Direct" src="https://github.com/user-attachments/assets/4ebae04f-f60f-4abf-9e57-5d145b674f0f"/>
+<img width="1856" height="930" alt="AyhanX-Agent" src="https://github.com/user-attachments/assets/4ebae04f-f60f-4abf-9e57-5d145b674f0f"/>
 <a href="https://github.com/AyhanMansur/AyhanX-Agent">
   <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1200&color=40E0D0&center=true&vCenter=true&width=680&lines=AyhanX-Agent;Premium+terminal+chat+for+DeepSeek;Streaming+%7C+Agent+Mode+%7C+Tools;One+file.+Zero+config." alt="Typing animation"/>
 </a>
 
 <br/>
 
-[![Version](https://img.shields.io/badge/version-3.2.0-4FCC624?logo=Version&logoColor=black)](https://linux.org)
-[![Linux](https://img.shields.io/badge/Linux-Any-FCC624?logo=linux&logoColor=black)](https://linux.org)
-[![Shell](https://img.shields.io/badge/Bash%2BPython-3776AB?logo=python&logoColor=white)](https://www.python.org)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](https://github.com/AyhanMansur/AyhanX-Agent/blob/main/LICENSE)
+[![Version](https://img.shields.io/badge/version-3.2.0-40E0D0?style=flat-square)](https://github.com/AyhanMansur/AyhanX-Agent/blob/main/ai.sh)
+[![Linux](https://img.shields.io/badge/Linux-Any-FCC624?logo=linux&logoColor=black&style=flat-square)](https://linux.org)
+[![Shell](https://img.shields.io/badge/Bash%2BPython-3776AB?logo=python&logoColor=white&style=flat-square)](https://www.python.org)
+[![DeepSeek](https://img.shields.io/badge/DeepSeek-Chat%20%26%20Reasoner-5eead4?style=flat-square)](https://deepseek.com)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](https://github.com/AyhanMansur/AyhanX-Agent/blob/main/LICENSE)
 [![Star](https://img.shields.io/github/stars/AyhanMansur/AyhanX-Agent?style=social)](https://github.com/AyhanMansur/AyhanX-Agent/)
 [![Fork](https://img.shields.io/github/forks/AyhanMansur/AyhanX-Agent?style=social)](https://github.com/AyhanMansur/AyhanX-Agent/)
 
@@ -20,11 +21,13 @@
 
 ## 🌟 درباره پروژه
 
-**AyhanX-Agent** یک کلاینت ترمینالی پریمیوم برای چت با **DeepSeek** است — با یک فایل شل، همه‌چیز نصب و راه‌اندازی می‌شود. الهام گرفته از تجربه‌ی **Claude Code**، با رابط گرادیانت، streaming زنده، Agent Mode و ابزارهای داخلی.
+**AyhanX-Agent** یک کلاینت ترمینالی پریمیوم و تک‌فایلی برای چت تعاملی با **DeepSeek** است. طراحی آن از تجربه‌ی کاربری **Claude Code** الهام گرفته و ترکیبی از رابط گرادیانت مدرن، پاسخ‌های streaming زنده، Agent Mode با ابزارهای داخلی، و نصب کاملاً خودکار را در یک اسکریپت Bash ارائه می‌دهد.
+
+هدف این پروژه، حذف کامل پیچیدگی‌های معمول (منوهای شلوغ، پنل‌های وب، پیکربندی دستی) و جایگزینی آن با یک جریان کاری ساده است: **یک دستور اجرا کن، مستقیم وارد چت شو.**
 
 > 🔒 **بدون منو، بدون پنل وب، بدون پیکربندی.** یک دستور بزن، مستقیم وارد چت شو.
 
-این پروژه یک بازنویسی کامل و ارتقاءیافته است که قابلیت‌های زیر را اضافه می‌کند:
+این پروژه یک بازنویسی کامل و ارتقاءیافته محسوب می‌شود که قابلیت‌های کلیدی زیر را به اکوسیستم کلاینت‌های ترمینالی DeepSeek اضافه می‌کند:
 
 | | قابلیت‌های AyhanX-Agent |
 |---|---|
@@ -41,7 +44,7 @@
 
 ## ⚡ شروع سریع
 
-روی سرور با دسترسی **root** یا کاربر معمولی اجرا کنید:
+نصب و راه‌اندازی در یک مرحله انجام می‌شود. اسکریپت به‌طور خودکار Python، وابستگی‌ها و محیط اجرا را آماده می‌کند. روی سرور با دسترسی **root** یا کاربر معمولی اجرا کنید:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/AyhanMansur/AyhanX-Agent/main/ai.sh)
@@ -64,6 +67,8 @@ flowchart LR
 
 <br/>
 
+فرآیند نصب تنها شامل یک پرسش است تا تجربه‌ی راه‌اندازی تا حد امکان کوتاه بماند:
+
 1. **کلید API**: از [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) بگیر. به‌صورت مخفی وارد می‌شه و در `~/.ai_platform/.env` با `chmod 600` ذخیره می‌شه.
 2. **هیچ چیز دیگه‌ای نمی‌پرسد.** مدل پیش‌فرض `deepseek-chat` است و می‌تونی بعداً با `/model` عوض کنی.
 
@@ -72,6 +77,8 @@ flowchart LR
 ---
 
 ## 🎮 دستورات
+
+AyhanX-Agent دو حالت اجرا دارد: **حالت تعاملی** (پیش‌فرض) و **حالت‌های تخصصی** برای کارهای تک‌مرحله‌ای مانند تست اتصال یا پرسش سریع.
 
 ```bash
 ./ai.sh                # چت (پیش‌فرض)
@@ -82,6 +89,8 @@ flowchart LR
 ```
 
 ### داخل چت
+
+تمام قابلیت‌های مدیریتی از طریق دستورات اسلش در دسترس هستند و autocomplete کامل دارند:
 
 | کلید | دستور | کار |
 |:-:|---|---|
@@ -120,6 +129,8 @@ flowchart LR
 
 ## 🛠️ ابزارهای Agent Mode
 
+در **Agent Mode**، مدل DeepSeek به‌صورت خودکار تصمیم می‌گیرد چه زمانی یک ابزار را فراخوانی کند. این قابلیت به مدل اجازه می‌دهد تا فراتر از پاسخ‌های متنی رفته و عملیات واقعی انجام دهد — از محاسبه و بررسی فایل‌سیستم تا اجرای دستورات امن شل.
+
 با فعال کردن `/agent`، DeepSeek خودش تصمیم می‌گیره کی ابزار صدا بزنه:
 
 | ابزار | کار | محدودیت |
@@ -154,6 +165,8 @@ flowchart LR
 ---
 
 ## 🔌 ارائه‌دهنده‌های پشتیبانی‌شده
+
+AyhanX-Agent بر پایه‌ی فرمت OpenAI-compatible API ساخته شده، بنابراین علاوه بر DeepSeek رسمی، می‌تواند با هر gateway سازگار (از جمله مدل‌های رایگان OpenRouter یا مدل‌های لوکال Ollama) کار کند.
 
 | ارائه‌دهنده | نوع | وضعیت |
 |---|---|---|
@@ -204,6 +217,8 @@ export DEEPSEEK_MODEL="qwen2.5:3b"
 
 ## 🔐 امنیت
 
+امنیت در AyhanX-Agent در سه لایه پیاده‌سازی شده است: **امنیت کلید**، **امنیت فایل‌سیستم**، و **امنیت اجرای دستورات**. هر لایه به‌صورت مستقل محافظت می‌شود تا حتی در صورت سوءاستفاده از یک لایه، بقیه‌ی سیستم آسیب نبیند.
+
 - 💾 **ذخیره امن کلید**: `~/.ai_platform/.env` با `chmod 600`، ورودی مخفی بدون نمایش در ترمینال
 - 🛡️ **فایل‌سیستم ایزوله**: `read_file` و `list_directory` فقط زیر `$HOME` کار می‌کنن (path traversal بلاک)
 - 🧮 **محاسبه امن**: `calculate` از `eval` با `__builtins__` خالی استفاده می‌کنه
@@ -215,6 +230,8 @@ export DEEPSEEK_MODEL="qwen2.5:3b"
 
 ## ⚠️ محدودیت‌ها
 
+این پروژه با وجود طراحی دقیق، در برخی سناریوها محدودیت‌هایی دارد که شفاف‌سازی آن‌ها بخشی از تعهد پروژه به شفافیت است:
+
 - فقط روی **Linux** تست شده (Windows/Mac پشتیبانی رسمی ندارن)
 - DeepSeek API **رایگان نیست** — برای رفع خطای `HTTP 402` باید [شارژ کنی](https://platform.deepseek.com/top_up)
 - `deepseek-reasoner` روی همه‌ی حساب‌ها فعال نیست
@@ -224,6 +241,8 @@ export DEEPSEEK_MODEL="qwen2.5:3b"
 ---
 
 ## 📁 ساختار فایل‌ها
+
+تمام داده‌های برنامه (کلید API، تنظیمات، گفتگوها و کد پایتون) در یک مسیر واحد و مستقل از پروژه‌ی اصلی ذخیره می‌شوند. این کار باعث می‌شود به‌روزرسانی اسکریپت هیچ‌گاه به داده‌های شما آسیب نزند.
 
 همه‌چیز داخل `~/.ai_platform/` ذخیره می‌شه:
 
@@ -246,6 +265,8 @@ export DEEPSEEK_MODEL="qwen2.5:3b"
 ---
 
 ## 🩺 بررسی اتصال
+
+قبل از شروع استفاده، می‌توانید با یک دستور ساده سلامت اتصال به API را بررسی کنید. این ابزار خروجی دقیقی از وضعیت endpoint، مدل، و پاسخ سرور ارائه می‌دهد.
 
 ```bash
 ./ai.sh health
@@ -286,6 +307,8 @@ export DEEPSEEK_MODEL="qwen2.5:3b"
 
 ## 🤝 **مشارکت!**
 
+این پروژه به‌صورت متن‌باز توسعه می‌یابد و هر نوع کمک — از گزارش باگ تا افزودن قابلیت جدید — ارزشمند است.
+
 * یک **Issue** باز کنید
 * یک **Pull Request** بفرستید
 * یا یک **Star** ⭐ بدهید تا دیگران هم پیدا کنند!
@@ -321,4 +344,6 @@ export DEEPSEEK_MODEL="qwen2.5:3b"
 
 <p>
   <b>ساخته‌شده با ❤️ توسط Ayhan Mansur</b>
-</p
+</p>
+
+</div>
