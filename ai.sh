@@ -2,25 +2,17 @@
 # ============================================================================
 #   AI RUNNER  ·  DeepSeek Terminal Chat  ·  Claude Code Style
 #   Repository:  https://github.com/AyhanMansur/AyhanX-Agent
-#   Version:     2.0.0
+#   Version:     3.0.0
 #
-#   A single-file installer for a beautiful terminal AI chat experience.
-#   Auto-configures Python, installs dependencies with mirror fallback,
-#   manages API keys safely, and provides an interactive REPL with:
-#     - streaming responses
-#     - agent mode with tool calling
-#     - conversation save/load
-#     - model switching
-#     - custom system prompts
-#     - multi-line input (Shift+Enter)
-#     - persistent history (arrow up/down)
+#   Straight-to-chat terminal AI client. Auto-configures Python,
+#   installs dependencies with mirror fallback, and launches an
+#   interactive REPL with streaming, tools, save/load, and more.
 #
 #   Usage:
-#     ./ai.sh                → interactive menu
-#     ./ai.sh tui            → terminal chat
+#     ./ai.sh                → banner + straight to chat
 #     ./ai.sh ask "prompt"   → one-shot answer
 #     ./ai.sh health         → test API connection
-#     ./ai.sh config         → show/edit config
+#     ./ai.sh config         → show config
 #     ./ai.sh version        → print version
 # ============================================================================
 set -euo pipefail
@@ -33,7 +25,8 @@ CONFIG_FILE="${APP_DIR}/config.json"
 ENV_FILE="${APP_DIR}/.env"
 HISTORY_FILE="${APP_DIR}/history.txt"
 CHATS_DIR="${APP_DIR}/chats"
-VERSION="2.0.0"
+REPO_URL="https://github.com/AyhanMansur/AyhanX-Agent"
+VERSION="3.0.0"
 
 # ---------- Cleanup trap ----------
 cleanup() {
@@ -46,16 +39,9 @@ trap cleanup EXIT INT TERM
 
 # ---------- ANSI palette (blue gradient) ----------
 if [[ -t 1 ]]; then
-  B1=$'\e[38;5;33m'   # deep blue
-  B2=$'\e[38;5;39m'   # bright blue
-  B3=$'\e[38;5;45m'   # cyan-blue
-  B4=$'\e[38;5;51m'   # aqua
-  BD=$'\e[1m'         # bold
-  DM=$'\e[2m'         # dim
-  RS=$'\e[0m'         # reset
-  RD=$'\e[91m'        # red
-  YL=$'\e[93m'        # yellow
-  GR=$'\e[92m'        # green
+  B1=$'\e[38;5;33m'; B2=$'\e[38;5;39m'; B3=$'\e[38;5;45m'; B4=$'\e[38;5;51m'
+  BD=$'\e[1m'; DM=$'\e[2m'; RS=$'\e[0m'
+  RD=$'\e[91m'; YL=$'\e[93m'; GR=$'\e[92m'
 else
   B1= B2= B3= B4= BD= DM= RS= RD= YL= GR=
 fi
@@ -79,9 +65,14 @@ print_banner() {
     printf '%s%s%s\n' "${BD}${colors[$i]}" "${lines[$i]}" "$RS"
   done
   printf '%-100s\n' | sed 's/ /─/g' | sed "s/^/${DM}${B2}/; s/$/${RS}/"
-  printf '  %s%sAI Runner%s  %s·%s  %sDeepSeek Terminal%s  %s·%s  %sv%s%s  %s·%s  %sClaude Code style%s\n\n' \
-    "$BD" "$B4" "$RS" "$DM" "$RS" \
-    "$BD" "$RS" "$DM" "$RS" "$DM" "$VERSION" "$RS" "$DM" "$RS" "$DM" "$RS"
+
+  # ---- Info lines (repo + version) ----
+  printf '  %s%sAI Runner%s  %s·%s  %sDeepSeek Terminal%s  %s·%s  %sv%s%s\n' \
+    "$BD" "$B4" "$RS" "$DM" "$RS" "$BD" "$RS" "$DM" "$RS" "$DM" "$VERSION" "$RS"
+  printf '  %s%s%s%s\n' "$DM" "$REPO_URL" "$RS" ""
+  printf '%s\n' "" 
+  printf '%-100s\n' | sed 's/ /─/g' | sed "s/^/${DM}${B2}/; s/$/${RS}/"
+  echo
 }
 
 # ---------- Logging helpers ----------
@@ -95,14 +86,12 @@ info()    { printf '%s  ·%s %s\n' "$DM" "$RS" "$*"; }
 #  ENVIRONMENT
 # ============================================================================
 find_python() {
-  # Prefer 3.12, then 3.11, 3.10, 3.13. Never accept 3.14+ (no wheels yet).
   for c in python3.12 python3.11 python3.10 python3.13; do
     if command -v "$c" >/dev/null 2>&1 \
        && "$c" -c 'import sys; sys.exit(0 if (3,10)<=sys.version_info[:2]<=(3,13) else 1)' 2>/dev/null; then
       echo "$c"; return 0
     fi
   done
-  # Fallback: uv-managed python
   if command -v uv >/dev/null 2>&1; then
     local p
     p="$(uv python find 3.12 2>/dev/null || true)"
@@ -112,7 +101,6 @@ find_python() {
 }
 
 pick_pypi_mirror() {
-  # Returns first reachable PyPI mirror
   local mirrors=(
     "https://pypi.org/simple"
     "https://mirror-pypi.runflare.com/simple"
@@ -203,113 +191,58 @@ write_tools() {
   cat > "$RUNNER_DIR/tools.py" <<'PYEOF'
 """Tool definitions and implementations for AI Runner agent mode."""
 import json
-import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-#  TOOL SCHEMAS (OpenAI-compatible)
-# ---------------------------------------------------------------------------
 TOOL_SPECS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_current_time",
-            "description": (
-                "Get the current UTC date and time in ISO 8601 format. "
-                "Use this when the user asks about the current time or date."
-            ),
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "calculate",
-            "description": (
-                "Evaluate a simple arithmetic expression. Supports +, -, *, /, "
-                "parentheses, and decimals. Use this for math questions."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "expression": {
-                        "type": "string",
-                        "description": "Math expression, e.g. '2 + 3 * 4'",
-                    }
-                },
-                "required": ["expression"],
+    {"type": "function", "function": {
+        "name": "get_current_time",
+        "description": "Get the current UTC date and time in ISO 8601 format.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "calculate",
+        "description": "Evaluate a simple arithmetic expression.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "expression": {"type": "string",
+                               "description": "Math expression, e.g. '2 + 3 * 4'"}
             },
+            "required": ["expression"],
         },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_directory",
-            "description": (
-                "List files and folders in a directory under the user's home. "
-                "Returns a JSON array of names. Directories end with '/'."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Relative path under home, e.g. 'projects'",
-                    }
-                },
-            },
+    }},
+    {"type": "function", "function": {
+        "name": "list_directory",
+        "description": "List files in a directory under the user's home.",
+        "parameters": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
         },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_file",
-            "description": (
-                "Read the contents of a text file under the user's home. "
-                "Returns up to 10 KB of UTF-8 text."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Relative path under home",
-                    }
-                },
-                "required": ["path"],
-            },
+    }},
+    {"type": "function", "function": {
+        "name": "read_file",
+        "description": "Read a text file under the user's home (10 KB limit).",
+        "parameters": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
         },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "run_shell",
-            "description": (
-                "Run a shell command and return its output. Use with caution — "
-                "only run safe read-only commands. Not for destructive actions."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "Shell command to execute",
-                    }
-                },
-                "required": ["command"],
-            },
+    }},
+    {"type": "function", "function": {
+        "name": "run_shell",
+        "description": "Run a safe shell command and return its output.",
+        "parameters": {
+            "type": "object",
+            "properties": {"command": {"type": "string"}},
+            "required": ["command"],
         },
-    },
+    }},
 ]
 
 
-# ---------------------------------------------------------------------------
-#  HELPERS
-# ---------------------------------------------------------------------------
 def _safe_resolve(path_str: str) -> Path:
-    """Resolve a path under home; raise if it escapes."""
     base = Path.home()
     target = (base / path_str).expanduser().resolve()
     if target != base and base not in target.parents:
@@ -317,85 +250,77 @@ def _safe_resolve(path_str: str) -> Path:
     return target
 
 
-def _format_error(msg: str) -> str:
+def _err(msg: str) -> str:
     return json.dumps({"error": msg})
 
 
-# ---------------------------------------------------------------------------
-#  TOOL IMPLEMENTATIONS
-# ---------------------------------------------------------------------------
-def tool_get_current_time(_args: dict) -> str:
+def tool_get_current_time(_a: dict) -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def tool_calculate(args: dict) -> str:
-    expr = args.get("expression", "").strip()
+def tool_calculate(a: dict) -> str:
+    expr = a.get("expression", "").strip()
     if not expr:
-        return _format_error("empty expression")
+        return _err("empty expression")
     allowed = set("0123456789+-*/(). ")
     if any(ch not in allowed for ch in expr):
-        return _format_error(f"disallowed character in expression: {expr!r}")
+        return _err(f"disallowed character in expression: {expr!r}")
     try:
-        result = eval(expr, {"__builtins__": {}}, {})
-        return str(result)
+        return str(eval(expr, {"__builtins__": {}}, {}))
     except Exception as e:
-        return _format_error(f"evaluation failed: {e}")
+        return _err(f"evaluation failed: {e}")
 
 
-def tool_list_directory(args: dict) -> str:
-    rel = args.get("path", "").strip()
+def tool_list_directory(a: dict) -> str:
+    rel = a.get("path", "").strip()
     try:
         target = _safe_resolve(rel) if rel else Path.home()
     except ValueError as e:
-        return _format_error(str(e))
+        return _err(str(e))
     if not target.exists():
-        return _format_error(f"path not found: {target}")
+        return _err(f"path not found: {target}")
     if not target.is_dir():
-        return _format_error(f"not a directory: {target}")
+        return _err(f"not a directory: {target}")
     try:
         items = sorted(target.iterdir())
     except PermissionError:
-        return _format_error("permission denied")
-    names = []
-    for p in items[:200]:
-        suffix = "/" if p.is_dir() else ""
-        names.append(p.name + suffix)
+        return _err("permission denied")
+    names = [(p.name + ("/" if p.is_dir() else "")) for p in items[:200]]
     return json.dumps(names)
 
 
-def tool_read_file(args: dict) -> str:
-    rel = args.get("path", "").strip()
+def tool_read_file(a: dict) -> str:
+    rel = a.get("path", "").strip()
     if not rel:
-        return _format_error("path required")
+        return _err("path required")
     try:
         target = _safe_resolve(rel)
     except ValueError as e:
-        return _format_error(str(e))
+        return _err(str(e))
     if not target.exists():
-        return _format_error(f"file not found: {target}")
+        return _err(f"file not found: {target}")
     if not target.is_file():
-        return _format_error(f"not a file: {target}")
+        return _err(f"not a file: {target}")
     try:
         data = target.read_text(encoding="utf-8", errors="replace")
     except PermissionError:
-        return _format_error("permission denied")
+        return _err("permission denied")
     if len(data) > 10 * 1024:
         data = data[:10 * 1024] + "\n... [truncated at 10 KB]"
     return data
 
 
-def tool_run_shell(args: dict) -> str:
-    cmd = args.get("command", "").strip()
+def tool_run_shell(a: dict) -> str:
+    cmd = a.get("command", "").strip()
     if not cmd:
-        return _format_error("command required")
-    # Refuse obviously destructive commands
+        return _err("command required")
     blocked = ("rm -rf /", "mkfs", ":(){", "dd if=/dev/zero")
     if any(b in cmd for b in blocked):
-        return _format_error("refused: destructive command detected")
+        return _err("refused: destructive command detected")
     try:
         result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=15,
-            cwd=str(Path.home()),
+            cmd, shell=True, capture_output=True, text=True,
+            timeout=15, cwd=str(Path.home()),
         )
         output = result.stdout
         if result.returncode != 0:
@@ -404,14 +329,11 @@ def tool_run_shell(args: dict) -> str:
             output += f"\n[stderr]: {result.stderr[:500]}"
         return output[:5000] or "(no output)"
     except subprocess.TimeoutExpired:
-        return _format_error("command timed out (15s)")
+        return _err("command timed out (15s)")
     except Exception as e:
-        return _format_error(f"{type(e).__name__}: {e}")
+        return _err(f"{type(e).__name__}: {e}")
 
 
-# ---------------------------------------------------------------------------
-#  REGISTRY
-# ---------------------------------------------------------------------------
 TOOL_IMPLS = {
     "get_current_time": tool_get_current_time,
     "calculate": tool_calculate,
@@ -444,16 +366,11 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.rule import Rule
 from rich.text import Text
 
 from .tools import TOOL_IMPLS, TOOL_SPECS
 
-# ---------------------------------------------------------------------------
-#  CONFIG
-# ---------------------------------------------------------------------------
 APP_DIR = Path(os.environ.get("APP_DIR", Path.home() / ".ai_platform"))
 CONFIG_PATH = APP_DIR / "config.json"
 HISTORY_PATH = APP_DIR / "history.txt"
@@ -469,14 +386,14 @@ class Config:
     system_prompt: str = ""
     agent_mode: bool = False
     max_context_messages: int = 40
-    temperature: float = 1.0
 
     @classmethod
     def load(cls) -> "Config":
         if CONFIG_PATH.exists():
             try:
                 data = json.loads(CONFIG_PATH.read_text())
-                return cls(**{k: v for k, v in data.items() if k in cls.__annotations__})
+                return cls(**{k: v for k, v in data.items()
+                              if k in cls.__annotations__})
             except Exception:
                 pass
         return cls()
@@ -486,9 +403,6 @@ class Config:
         os.chmod(CONFIG_PATH, 0o600)
 
 
-# ---------------------------------------------------------------------------
-#  CONVERSATION
-# ---------------------------------------------------------------------------
 @dataclass
 class Conversation:
     messages: list[dict[str, str]] = field(default_factory=list)
@@ -500,11 +414,7 @@ class Conversation:
     def add_assistant(self, text: str) -> None:
         self.messages.append({"role": "assistant", "content": text})
 
-    def add_system(self, text: str) -> None:
-        self.messages.append({"role": "system", "content": text})
-
     def trim(self, max_messages: int) -> None:
-        """Trim oldest messages beyond limit, keeping system message."""
         system = [m for m in self.messages if m["role"] == "system"]
         dialog = [m for m in self.messages if m["role"] != "system"]
         if len(dialog) > max_messages:
@@ -521,19 +431,14 @@ class Conversation:
         path = CHATS_DIR / f"{name}.json"
         if not path.exists():
             raise FileNotFoundError(f"chat not found: {name}")
-        data = json.loads(path.read_text())
         conv = cls()
-        conv.messages = data
+        conv.messages = json.loads(path.read_text())
         return conv
 
     def to_api(self) -> list[dict[str, str]]:
-        """Convert to API format (drop empty messages)."""
         return [m for m in self.messages if m.get("content", "").strip()]
 
 
-# ---------------------------------------------------------------------------
-#  CLIENT
-# ---------------------------------------------------------------------------
 class DeepSeekClient:
     def __init__(self, api_key: str, base_url: str, model: str):
         self.api_key = api_key
@@ -541,18 +446,14 @@ class DeepSeekClient:
         self.model = model
 
     def _headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        return {"Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"}
 
     def _hint(self, status: int) -> str:
         return {
             401: "invalid API key — platform.deepseek.com/api_keys",
             402: "insufficient balance — platform.deepseek.com/top_up",
             429: "rate limited — wait a few seconds",
-            500: "server error — try again",
-            503: "service unavailable — try again later",
         }.get(status, "")
 
     def _error(self, status: int, body: str) -> str:
@@ -565,29 +466,20 @@ class DeepSeekClient:
         hint = self._hint(status)
         return f"HTTP {status}: {msg}" + (f"\n→ {hint}" if hint else "")
 
-    def chat(self, messages: list[dict[str, str]],
-             tools: list[dict] | None = None,
-             stream: bool = True):
-        """If stream, yields text chunks. Else returns full response."""
+    def chat(self, messages, tools=None, stream=True):
         payload: dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "stream": stream,
+            "model": self.model, "messages": messages, "stream": stream,
         }
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
         client = httpx.Client(timeout=180)
-        try:
-            if stream:
-                return self._stream(client, payload)
-            return self._nonstream(client, payload)
-        except Exception:
-            client.close()
-            raise
+        if stream:
+            return self._stream(client, payload)
+        return self._nonstream(client, payload)
 
-    def _stream(self, client: httpx.Client, payload: dict):
+    def _stream(self, client, payload):
         def gen():
             try:
                 with client.stream(
@@ -615,12 +507,10 @@ class DeepSeekClient:
                 client.close()
         return gen()
 
-    def _nonstream(self, client: httpx.Client, payload: dict):
+    def _nonstream(self, client, payload):
         try:
-            r = client.post(
-                f"{self.base_url}/chat/completions",
-                headers=self._headers(), json=payload,
-            )
+            r = client.post(f"{self.base_url}/chat/completions",
+                            headers=self._headers(), json=payload)
             if r.status_code >= 400:
                 return {"error": self._error(r.status_code, r.text)}
             return r.json()
@@ -628,14 +518,10 @@ class DeepSeekClient:
             client.close()
 
 
-# ---------------------------------------------------------------------------
-#  UI
-# ---------------------------------------------------------------------------
 console = Console()
 
 PROMPT_STYLE = Style.from_dict({
     "arrow": "ansibrightcyan bold",
-    "hint": "ansibrightblack",
 })
 
 KB = KeyBindings()
@@ -659,19 +545,17 @@ def _(event):
 def banner(model: str, agent: bool) -> None:
     agent_badge = " [bold yellow]· AGENT[/]" if agent else ""
     console.print()
-    console.print(
-        Panel(
-            Text.from_markup(
-                "[bold cyan]✻[/] [bold]AI Runner[/]  [dim]·[/]  "
-                f"[white]{model}[/]{agent_badge}\n\n"
-                "[dim]/help for commands   /clear to clear   "
-                "/new new chat   /exit to quit[/]\n"
-                "[dim]Shift+Enter newline · Ctrl+C cancel · Ctrl+D exit[/]"
-            ),
-            border_style="dim cyan",
-            padding=(0, 2),
-        )
-    )
+    console.print(Panel(
+        Text.from_markup(
+            "[bold cyan]✻[/] [bold]AI Runner[/]  [dim]·[/]  "
+            f"[white]{model}[/]{agent_badge}\n\n"
+            "[dim]/help for commands   /clear to clear   "
+            "/new new chat   /exit to quit[/]\n"
+            "[dim]Shift+Enter newline · Ctrl+C cancel · Ctrl+D exit[/]"
+        ),
+        border_style="dim cyan",
+        padding=(0, 2),
+    ))
     console.print()
 
 
@@ -682,10 +566,8 @@ def help_panel() -> None:
             "[cyan]/help[/]        this message\n"
             "[cyan]/new[/]         new conversation\n"
             "[cyan]/clear[/]       clear screen\n"
-            "[cyan]/model[/]       list models\n"
-            "[cyan]/model NAME[/]  switch model\n"
-            "[cyan]/system[/]      show system prompt\n"
-            "[cyan]/system TEXT[/] set system prompt\n"
+            "[cyan]/model[/]       list/switch models\n"
+            "[cyan]/system[/]      set/show system prompt\n"
             "[cyan]/agent[/]       toggle agent mode\n"
             "[cyan]/save NAME[/]   save conversation\n"
             "[cyan]/load NAME[/]   load conversation\n"
@@ -703,9 +585,7 @@ def help_panel() -> None:
     ))
 
 
-def stream_response(client: DeepSeekClient, conv: Conversation,
-                     cfg: Config) -> str:
-    """Stream a response and render to console. Returns full text."""
+def stream_response(client, conv, cfg) -> str:
     msgs = conv.to_api()
     if cfg.system_prompt:
         msgs = [{"role": "system", "content": cfg.system_prompt}] + msgs
@@ -731,16 +611,14 @@ def stream_response(client: DeepSeekClient, conv: Conversation,
     return "".join(full)
 
 
-def run_agent(client: DeepSeekClient, conv: Conversation,
-               cfg: Config) -> str:
-    """Agent loop with tool calling. Returns final answer."""
+def run_agent(client, conv, cfg) -> str:
     msgs = conv.to_api()
     if cfg.system_prompt:
         msgs = [{"role": "system", "content": cfg.system_prompt}] + msgs
 
     console.print("[cyan bold]⏺[/] ", end="", highlight=False)
 
-    for iteration in range(8):
+    for _ in range(8):
         try:
             resp = client.chat(msgs, tools=TOOL_SPECS, stream=False)
         except httpx.RequestError as e:
@@ -759,7 +637,6 @@ def run_agent(client: DeepSeekClient, conv: Conversation,
             console.print(content)
             return content
 
-        # Print any text the assistant emitted alongside tool calls
         if msg.get("content"):
             console.print(msg["content"])
 
@@ -792,138 +669,14 @@ def run_agent(client: DeepSeekClient, conv: Conversation,
                 preview += "…"
             console.print(f"[dim]    → {preview}[/]")
 
-            msgs.append({
-                "role": "tool",
-                "tool_call_id": tc.get("id", ""),
-                "content": result,
-            })
+            msgs.append({"role": "tool",
+                         "tool_call_id": tc.get("id", ""),
+                         "content": result})
 
     console.print("[yellow]  ⚠ max tool iterations reached[/]")
     return ""
 
 
-# ---------------------------------------------------------------------------
-#  COMMAND HANDLERS
-# ---------------------------------------------------------------------------
-def cmd_clear(cfg: Config) -> None:
-    console.clear()
-    banner(cfg.model, cfg.agent_mode)
-
-
-def cmd_model(cfg: Config, args: list[str]) -> None:
-    if not args:
-        console.print(f"[cyan]current:[/] {cfg.model}")
-        console.print(f"[dim]available: {', '.join(MODELS)}[/]")
-        return
-    new_model = args[0]
-    if new_model not in MODELS:
-        console.print(f"[red]unknown model: {new_model}[/]")
-        console.print(f"[dim]available: {', '.join(MODELS)}[/]")
-        return
-    cfg.model = new_model
-    cfg.save()
-    console.print(f"[green]→ model set to[/] {new_model}")
-
-
-def cmd_system(cfg: Config, args: list[str]) -> None:
-    text = " ".join(args).strip()
-    if not text:
-        if cfg.system_prompt:
-            console.print(Panel(cfg.system_prompt, title="system prompt",
-                                border_style="dim"))
-        else:
-            console.print("[dim]no system prompt set[/]")
-        return
-    cfg.system_prompt = text
-    cfg.save()
-    console.print("[green]→ system prompt set[/]")
-
-
-def cmd_agent(cfg: Config) -> None:
-    cfg.agent_mode = not cfg.agent_mode
-    cfg.save()
-    state = "[green]ON[/]" if cfg.agent_mode else "[red]OFF[/]"
-    console.print(f"→ agent mode: {state}")
-
-
-def cmd_save(conv: Conversation, args: list[str]) -> None:
-    if not args:
-        name = f"chat-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    else:
-        name = args[0]
-    try:
-        path = conv.save(name)
-        console.print(f"[green]→ saved to[/] {path}")
-    except Exception as e:
-        console.print(f"[red]save failed: {e}[/]")
-
-
-def cmd_load(conv: Conversation, args: list[str]) -> Conversation:
-    if not args:
-        console.print("[red]usage: /load NAME[/]")
-        return conv
-    try:
-        new_conv = Conversation.load(args[0])
-        console.print(f"[green]→ loaded[/] {len(new_conv.messages)} messages")
-        for m in new_conv.messages:
-            if m["role"] == "user":
-                console.print(f"\n[cyan bold]❯[/] {m['content']}")
-            elif m["role"] == "assistant":
-                console.print(f"\n[cyan bold]⏺[/] {m['content']}")
-        return new_conv
-    except FileNotFoundError as e:
-        console.print(f"[red]{e}[/]")
-        return conv
-    except Exception as e:
-        console.print(f"[red]load failed: {e}[/]")
-        return conv
-
-
-def cmd_chats() -> None:
-    chats = sorted(CHATS_DIR.glob("*.json"))
-    if not chats:
-        console.print("[dim]no saved chats[/]")
-        return
-    console.print("[bold]saved chats:[/]")
-    for p in chats:
-        size = p.stat().st_size
-        console.print(f"  [cyan]{p.stem}[/]  [dim]({size} bytes)[/]")
-
-
-def cmd_history(conv: Conversation) -> None:
-    if not conv.messages:
-        console.print("[dim]empty conversation[/]")
-        return
-    for m in conv.messages:
-        role = m["role"]
-        if role == "user":
-            console.print(f"[bold cyan]❯[/] {m['content']}")
-        elif role == "assistant":
-            console.print(f"[cyan bold]⏺[/] {m['content']}")
-        elif role == "system":
-            console.print(f"[dim]⚙ {m['content']}[/]")
-
-
-def cmd_info(cfg: Config, conv: Conversation) -> None:
-    console.print(Panel(
-        Text.from_markup(
-            f"[bold]model[/]         {cfg.model}\n"
-            f"[bold]agent mode[/]    {'ON' if cfg.agent_mode else 'OFF'}\n"
-            f"[bold]system prompt[/] {'set' if cfg.system_prompt else 'none'}\n"
-            f"[bold]messages[/]      {len(conv.messages)}\n"
-            f"[bold]config[/]        {CONFIG_PATH}\n"
-            f"[bold]history[/]       {HISTORY_PATH}\n"
-            f"[bold]chats[/]         {CHATS_DIR}"
-        ),
-        title="[bold cyan]info[/]",
-        border_style="dim cyan",
-        padding=(1, 2),
-    ))
-
-
-# ---------------------------------------------------------------------------
-#  MAIN LOOP
-# ---------------------------------------------------------------------------
 def main() -> int:
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
@@ -975,30 +728,80 @@ def main() -> int:
             if cmd in ("/exit", "/quit"):
                 console.print("[dim]bye[/]")
                 return 0
-            if cmd == "/help":
+            elif cmd == "/help":
                 help_panel()
             elif cmd == "/clear":
-                cmd_clear(cfg)
+                console.clear(); banner(cfg.model, cfg.agent_mode)
             elif cmd == "/new":
                 conv = Conversation()
                 console.print("[dim]· new conversation[/]")
             elif cmd == "/model":
-                cmd_model(cfg, args)
-                banner(cfg.model, cfg.agent_mode)
+                if not args:
+                    console.print(f"[cyan]current:[/] {cfg.model}")
+                    console.print(f"[dim]available: {', '.join(MODELS)}[/]")
+                elif args[0] in MODELS:
+                    cfg.model = args[0]; cfg.save()
+                    console.print(f"[green]→ model set to[/] {args[0]}")
+                    banner(cfg.model, cfg.agent_mode)
+                else:
+                    console.print(f"[red]unknown model: {args[0]}[/]")
             elif cmd == "/system":
-                cmd_system(cfg, args)
+                txt = " ".join(args).strip()
+                if not txt:
+                    if cfg.system_prompt:
+                        console.print(Panel(cfg.system_prompt,
+                                            title="system prompt",
+                                            border_style="dim"))
+                    else:
+                        console.print("[dim]no system prompt set[/]")
+                else:
+                    cfg.system_prompt = txt; cfg.save()
+                    console.print("[green]→ system prompt set[/]")
             elif cmd == "/agent":
-                cmd_agent(cfg)
+                cfg.agent_mode = not cfg.agent_mode; cfg.save()
+                state = "[green]ON[/]" if cfg.agent_mode else "[red]OFF[/]"
+                console.print(f"→ agent mode: {state}")
+                banner(cfg.model, cfg.agent_mode)
             elif cmd == "/save":
-                cmd_save(conv, args)
+                name = args[0] if args else f"chat-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                try:
+                    p = conv.save(name)
+                    console.print(f"[green]→ saved to[/] {p}")
+                except Exception as e:
+                    console.print(f"[red]save failed: {e}[/]")
             elif cmd == "/load":
-                conv = cmd_load(conv, args)
+                if not args:
+                    console.print("[red]usage: /load NAME[/]")
+                else:
+                    try:
+                        conv = Conversation.load(args[0])
+                        console.print(f"[green]→ loaded[/] {len(conv.messages)} messages")
+                    except FileNotFoundError as e:
+                        console.print(f"[red]{e}[/]")
             elif cmd == "/chats":
-                cmd_chats()
+                chats = sorted(CHATS_DIR.glob("*.json"))
+                if not chats:
+                    console.print("[dim]no saved chats[/]")
+                else:
+                    for p in chats:
+                        console.print(f"  [cyan]{p.stem}[/]  "
+                                      f"[dim]({p.stat().st_size} bytes)[/]")
             elif cmd == "/history":
-                cmd_history(conv)
+                for m in conv.messages:
+                    if m["role"] == "user":
+                        console.print(f"[bold cyan]❯[/] {m['content']}")
+                    elif m["role"] == "assistant":
+                        console.print(f"[cyan bold]⏺[/] {m['content']}")
             elif cmd == "/info":
-                cmd_info(cfg, conv)
+                console.print(Panel(Text.from_markup(
+                    f"[bold]model[/]         {cfg.model}\n"
+                    f"[bold]agent mode[/]    {'ON' if cfg.agent_mode else 'OFF'}\n"
+                    f"[bold]system prompt[/] {'set' if cfg.system_prompt else 'none'}\n"
+                    f"[bold]messages[/]      {len(conv.messages)}\n"
+                    f"[bold]config[/]        {CONFIG_PATH}\n"
+                    f"[bold]chats[/]         {CHATS_DIR}"
+                ), title="[bold cyan]info[/]", border_style="dim cyan",
+                    padding=(1, 2)))
             else:
                 console.print(f"[red]unknown command: {cmd}[/]")
             continue
@@ -1030,8 +833,6 @@ def main() -> int:
 if __name__ == "__main__":
     sys.exit(main())
 PYEOF
-
-  # Init file for package
   touch "$RUNNER_DIR/__init__.py"
 }
 
@@ -1064,17 +865,12 @@ if r.status_code >= 400:
         msg = r.json().get("error", {}).get("message", r.text)
     except Exception:
         msg = r.text
-    hints = {401: "invalid key", 402: "no balance",
-             429: "rate limited", 500: "server error"}
+    hints = {401: "invalid key", 402: "no balance", 429: "rate limited"}
     hint = hints.get(r.status_code, "")
     print(f"HTTP {r.status_code}: {msg}" + (f" ({hint})" if hint else ""),
           file=sys.stderr)
     sys.exit(1)
-try:
-    print(r.json()["choices"][0]["message"]["content"])
-except (KeyError, IndexError):
-    print(f"unexpected response: {r.text[:300]}", file=sys.stderr)
-    sys.exit(1)
+print(r.json()["choices"][0]["message"]["content"])
 PY
 }
 
@@ -1131,72 +927,45 @@ cmd_config() {
 cmd_version() {
   section "Version"
   echo "  ai-runner: $VERSION"
+  echo "  repo:      $REPO_URL"
   echo "  app dir:   $APP_DIR"
   if [[ -x "$VENV/bin/python" ]]; then
     echo "  python:    $("$VENV/bin/python" --version 2>&1)"
   fi
-  if [[ -f "$CONFIG_FILE" ]]; then
-    echo "  config:    $(wc -l < "$CONFIG_FILE") lines"
-  fi
 }
 
 # ============================================================================
-#  MENU
-# ============================================================================
-show_menu() {
-  echo
-  section "Choose mode"
-  cat <<EOF
-
-   ${B4}1${RS})  ${BD}tui${RS}     ${DM}terminal chat (Claude Code style)${RS}
-   ${B4}2${RS})  ${BD}ask${RS}     ${DM}one-shot: ask a prompt${RS}
-   ${B4}3${RS})  ${BD}health${RS}  ${DM}test DeepSeek API${RS}
-   ${B4}4${RS})  ${BD}config${RS}  ${DM}show config${RS}
-   ${B4}5${RS})  ${BD}version${RS} ${DM}show version${RS}
-   ${B4}q${RS})  ${DM}quit${RS}
-
-EOF
-}
-
-# ============================================================================
-#  MAIN DISPATCHER
+#  MAIN — banner, setup, straight to chat
 # ============================================================================
 main() {
   print_banner
-  ensure_env
-  ensure_key
 
-  section "Writing runner"
-  write_tools
-  write_tui
-  ok "runner ready at $RUNNER_DIR"
-
-  case "${1:-menu}" in
-    tui)     cmd_tui ;;
-    ask)     shift; cmd_ask "$@" ;;
-    health)  cmd_health ;;
+  case "${1:-chat}" in
+    ask)     shift; ensure_env; ensure_key; cmd_ask "$@" ;;
+    health)  ensure_env; ensure_key; cmd_health ;;
     config)  cmd_config ;;
     version) cmd_version ;;
-    menu|"")
-      while true; do
-        show_menu
-        read -r -p "  > " choice
-        case "$choice" in
-          1) cmd_tui ;;
-          2) read -r -p "  prompt: " p; cmd_ask "$p" ;;
-          3) cmd_health ;;
-          4) cmd_config ;;
-          5) cmd_version ;;
-          q|Q) exit 0 ;;
-          *) warn "unknown choice" ;;
-        esac
-      done
+    chat|tui|"")
+      ensure_env
+      ensure_key
+      section "Preparing runner"
+      write_tools
+      write_tui
+      ok "runner ready"
+      echo
+      # small delay so user sees setup finished
+      sleep 0.15
+      cmd_tui
+      echo
+      section "Chat closed"
+      printf '%s  goodbye · %s%s\n' "$DM" "$REPO_URL" "$RS"
       ;;
     *)
       err "unknown mode: $1"
-      echo "usage: $0 [tui|ask|health|config|version|menu]"
+      echo "usage: $0 [chat|ask|health|config|version]"
       exit 1
       ;;
   esac
 }
+
 main "$@"
