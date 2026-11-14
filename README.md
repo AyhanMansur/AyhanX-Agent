@@ -2,15 +2,16 @@
 <div align="center">
 <img width="1856" height="930" alt="AyhanX-Agent" src="https://github.com/user-attachments/assets/4ebae04f-f60f-4abf-9e57-5d145b674f0f"/>
 <a href="https://github.com/AyhanMansur/AyhanX-Agent">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1200&color=40E0D0&center=true&vCenter=true&width=680&lines=AyhanX-Agent;Premium+terminal+chat+for+DeepSeek;Streaming+%7C+Agent+Mode+%7C+Tools;One+file.+Zero+config." alt="Typing animation"/>
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1200&color=40E0D0&center=true&vCenter=true&width=680&lines=AyhanX-Agent;Premium+terminal+chat+for+all+LLMs;24+providers+%7C+Apple-style+UI;Streaming+%7C+Agent+Mode+%7C+Web+UI;One+file.+Zero+config." alt="Typing animation"/>
 </a>
 <br/>
 <br/>
-
-[![Version](https://img.shields.io/badge/version-3.4.2-FCC624?logo=Version&logoColor=black)](https://github.com/AyhanMansur/AyhanX-Agent)
+  
+[![License](https://img.shields.io/badge/License-MIT-yellow)](https://github.com/AyhanMansur/AyhanX-Agent/blob/main/LICENSE)
+[![Version](https://img.shields.io/badge/version-5.0.0-40E0D0?logo=Version&logoColor=black)](https://github.com/AyhanMansur/AyhanX-Agent)
 [![Linux](https://img.shields.io/badge/Linux-Any-FCC624?logo=linux&logoColor=black)](https://linux.org)
 [![Shell](https://img.shields.io/badge/Bash%2BPython-3776AB?logo=python&logoColor=white)](https://www.python.org)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](https://github.com/AyhanMansur/AyhanX-Agent/blob/main/LICENSE)
+[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell&logoColor=white)](https://microsoft.com/powershell)
 [![Star](https://img.shields.io/github/stars/AyhanMansur/AyhanX-Agent?style=social)](https://github.com/AyhanMansur/AyhanX-Agent/)
 [![Fork](https://img.shields.io/github/forks/AyhanMansur/AyhanX-Agent?style=social)](https://github.com/AyhanMansur/AyhanX-Agent/)
 
@@ -20,32 +21,33 @@
 
 ## 🌟 درباره پروژه
 
-**AyhanX-Agent** یک کلاینت ترمینالی پریمیوم و تک‌فایلی برای چت تعاملی با **DeepSeek** است. طراحی آن از تجربه‌ی کاربری **Claude Code** الهام گرفته و ترکیبی از رابط گرادیانت مدرن، پاسخ‌های streaming زنده، Agent Mode با ابزارهای داخلی، و نصب کاملاً خودکار را در یک اسکریپت Bash ارائه می‌دهد.
+**AyhanX-Agent** یک کلاینت ترمینالی و وب پریمیوم و تک‌فایلی برای چت تعاملی با **۲۴ ارائه‌دهنده‌ی LLM** است — از DeepSeek، OpenRouter، Groq، Google AI Studio، Mistral، NVIDIA NIM و xAI گرفته تا مدل‌های کاملاً لوکال (Ollama، LM Studio، vLLM، llama.cpp، LocalAI).
 
-هدف این پروژه، حذف کامل پیچیدگی‌های معمول (منوهای شلوغ، پنل‌های وب، پیکربندی دستی) و جایگزینی آن با یک جریان کاری ساده است: **یک دستور اجرا کن، مستقیم وارد چت شو.**
+طراحی آن از **Claude Code** و **Apple's Fluid Interfaces** الهام گرفته و ترکیبی از رابط گرادیانت مدرن، پاسخ‌های streaming زنده، Agent Mode با **۱۰ ابزار قدرتمند** (نوشتن فایل، اجرای شل، اجرای پایتون و …)، و نصب کاملاً خودکار را در یک اسکریپت ارائه می‌دهد.
 
-> 🔒 **بدون منو، بدون پنل وب، بدون پیکربندی.** یک دستور بزن، مستقیم وارد چت شو.
+هدف: **یک دستور اجرا کن، مستقیم وارد چت شو.**
 
-این پروژه یک بازنویسی کامل و ارتقاءیافته محسوب می‌شود که قابلیت‌های کلیدی زیر را به اکوسیستم کلاینت‌های ترمینالی DeepSeek اضافه می‌کند:
+> 🔒 **بدون منو، بدون پیکربندی دستی.** یک دستور بزن، وارد چت شو — ترمینال یا مرورگر.
 
 | | قابلیت‌های AyhanX-Agent |
 |---|---|
 | 🎨 | **رابط ترمینالی پریمیوم** — لوگوی گرادیانت، chip مدل و حالت، bottom toolbar زنده |
-| 🌊 | **پاسخ‌های streaming** — رندر زنده Markdown داخل پنل‌های گِرد |
-| 🛠️ | **Agent Mode** — ۵ ابزار داخلی (زمان، محاسبه، فایل، دایرکتوری، شل امن) |
+| 🌐 | **Web UI کامل** — رابط مرورگری با design Apple-style، در `http://localhost:8080` |
+| 🌊 | **پاسخ‌های streaming** — رندر زنده Markdown در هر دو رابط |
+| 🛠️ | **Agent Mode قدرتمند** — ۱۰ ابزار داخلی با دسترسی کامل به فایل‌سیستم و ترمینال |
 | 💾 | **مدیریت گفتگو** — ذخیره/بارگذاری خودکار + `last.json` برای resume |
 | 🔄 | **مدل‌های سفارشی** — با `/model add NAME` هر مدلی رو اضافه کن |
-| 🚀 | **نصب خودکار** — Python از طریق `uv`، پکیج‌ها با fallback به mirror ایرانی |
-| 🔐 | **کلید امن** — ورودی مخفی، `chmod 600`، بدون نمایش در ترمینال |
+| 🔌 | **۲۴ ارائه‌دهنده** — ابری + لوکال + Gateway |
+| 🪟 | **Cross-platform** — Bash (Linux) + PowerShell (Windows) |
+| ✨ | **Apple Design** — springs, velocity handoff, reduced-motion, translucent materials |
+| 🎯 | **Auto-port** — اگه 8080 اشغال بود، خودکار 8081, 8082… رو امتحان می‌کنه |
+| 📐 | **DESIGN.md خودکار** — principles از ریپو fetch و به agent تزریق می‌شه |
+| 🔐 | **کلید امن** — ورودی مخفی، `chmod 600`، پشتیبانی از چند provider همزمان |
 | 🖥️ | **Clear بعد از نصب** — فقط لوگو + چت، تمیز و پریمیوم |
-| 🔌 | **۸ ارائه‌دهنده** — DeepSeek، OpenRouter، Groq + ۵ لوکال (Ollama، LM Studio، vLLM، llama.cpp، LocalAI) |
-| 🪟 | **Cross-platform** — Bash برای Linux + PowerShell برای Windows |
 
 ---
 
 ## ⚡ شروع سریع
-
-نصب و راه‌اندازی در یک مرحله انجام می‌شود. اسکریپت به‌طور خودکار Python، وابستگی‌ها و محیط اجرا را آماده می‌کند. روی سرور با دسترسی **root** یا کاربر معمولی اجرا کنید:
 
 ### 🐧 Linux
 
@@ -54,8 +56,6 @@ bash <(curl -Ls https://raw.githubusercontent.com/AyhanMansur/AyhanX-Agent/main/
 ```
 
 ### 🪟 Windows (PowerShell 5.1+)
-
-ابتدا یک‌بار اجازه‌ی اجرای اسکریپت را بدهید، سپس نصب کنید:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
@@ -66,12 +66,14 @@ irm https://raw.githubusercontent.com/AyhanMansur/AyhanX-Agent/main/ai.ps1 | iex
 flowchart LR
     A[🚀 اجرای اسکریپت] --> B[🐍 نصب Python]
     B --> C[📦 نصب پکیج‌ها]
-    C --> D[🔑 دریافت API Key]
-    D --> E[🧹 پاک‌سازی صفحه]
-    E --> F[✨ شروع چت]
-    F --> G[💬 پاسخ streaming]
-    G --> H[🛠️ Agent Mode]
-    H --> I[💾 ذخیره گفتگو]
+    C --> D[📐 Fetch DESIGN.md]
+    D --> E[🔑 دریافت API Key]
+    E --> F[🧹 پاک‌سازی صفحه]
+    F --> G[✨ شروع چت]
+    G --> H[💬 پاسخ streaming]
+    H --> I[🛠️ Agent Mode]
+    I --> J[💾 ذخیره گفتگو]
+    G -.->|/web| K[🌐 Web UI]
 ```
 
 <details>
@@ -79,11 +81,10 @@ flowchart LR
 
 <br/>
 
-فرآیند نصب تنها شامل یک پرسش است تا تجربه‌ی راه‌اندازی تا حد امکان کوتاه بماند:
-
-1. **کلید API**: از [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) بگیر. به‌صورت مخفی وارد می‌شه و در `~/.ai_platform/.env` با `chmod 600` ذخیره می‌شه.
-2. **هیچ چیز دیگه‌ای نمی‌پرسد.** مدل پیش‌فرض `deepseek-chat` است و می‌تونی بعداً با `/model` عوض کنی.
+1. **کلید API**: از provider انتخابی بگیر. به‌صورت مخفی وارد می‌شه و در `~/.ai_platform/.env` با `chmod 600` ذخیره می‌شه.
+2. **هیچ چیز دیگه‌ای نمی‌پرسد.** مدل پیش‌فرض بر اساس provider انتخاب می‌شه.
 3. **ارائه‌دهنده‌های لوکال** (Ollama، LM Studio و …) **کلید API نمی‌خوان**.
+4. **DESIGN.md** خودکار از ریپو fetch می‌شه و به agent تزریق می‌شه (اگه موجود باشه).
 
 </details>
 
@@ -91,57 +92,53 @@ flowchart LR
 
 ## 🎮 دستورات
 
-AyhanX-Agent دو حالت اجرا دارد: **حالت تعاملی** (پیش‌فرض) و **حالت‌های تخصصی** برای کارهای تک‌مرحله‌ای مانند تست اتصال یا پرسش سریع.
-
 ```bash
-./ai.sh                # چت (پیش‌فرض)
-./ai.sh ask "prompt"   # یک سؤال، یک جواب
-./ai.sh health         # تست اتصال API
-./ai.sh config         # نمایش فایل‌های پیکربندی
-./ai.sh version        # نمایش نسخه
+./ai.sh                    # چت ترمینال
+./ai.sh web                # Web UI → http://localhost:8080
+./ai.sh web 9000           # Web UI روی پورت دلخواه
+./ai.sh ask "prompt"       # یک سؤال، یک جواب
+./ai.sh health             # تست اتصال API
+./ai.sh switch <provider>  # سوییچ سریع و خروج
+./ai.sh config             # نمایش فایل‌های پیکربندی
+./ai.sh version            # نمایش نسخه
+./ai.sh --provider NAME    # force provider
 ```
 
-### 🪟 روی Windows
+### 🪟 Windows
 
 ```powershell
-.\ai.ps1                # چت (پیش‌فرض)
-.\ai.ps1 ask "prompt"   # یک سؤال، یک جواب
-.\ai.ps1 health         # تست اتصال API
-.\ai.ps1 config         # نمایش فایل‌های پیکربندی
-.\ai.ps1 version        # نمایش نسخه
+.\ai.ps1                    # چت
+.\ai.ps1 -Provider ollama   # force provider
+.\ai.ps1 ask "prompt"       # یک سؤال
+.\ai.ps1 health             # تست اتصال
 ```
-
-### انتخاب ارائه‌دهنده
-
-```bash
-./ai.sh --provider ollama         # Ollama
-./ai.sh --provider openrouter     # OpenRouter
-./ai.sh --provider groq           # Groq
-./ai.sh --provider auto           # auto-detect سرور لوکال
-```
-
-روی Windows: `.\ai.ps1 -Provider ollama` و به همین ترتیب.
 
 ### داخل چت
 
-تمام قابلیت‌های مدیریتی از طریق دستورات اسلش در دسترس هستند و autocomplete کامل دارند:
+تمام قابلیت‌ها از طریق دستورات اسلش با autocomplete کامل:
 
-| کلید | دستور | کار |
-|:-:|---|---|
-| `/help` | | لیست همه‌ی دستورات |
-| `/new` | | شروع گفتگوی جدید |
-| `/clear` | | پاک کردن صفحه |
-| `/model` | `/model NAME` | نمایش یا سوییچ مدل |
-| `/model refresh` | | fetch زنده‌ی مدل‌های لوکال |
-| `/model add NAME` | | افزودن مدل سفارشی |
-| `/system` | `/system TEXT` | نمایش یا تنظیم system prompt |
-| `/agent` | | روشن/خاموش حالت Agent |
-| `/save` | `/save NAME` | ذخیره‌ی گفتگو |
-| `/load NAME` | | بارگذاری گفتگو |
-| `/chats` | | لیست گفتگوهای ذخیره‌شده |
-| `/history` | | نمایش گفتگوی فعلی |
-| `/info` | | خلاصه‌ی پیکربندی |
-| `/exit` | | خروج |
+| دستور | کار |
+|:-:|---|
+| `/help` | لیست همه‌ی دستورات |
+| `/new` | شروع گفتگوی جدید |
+| `/clear` | پاک کردن صفحه |
+| `/model` | نمایش لیست مدل‌ها |
+| `/model NAME` | سوییچ به مدل |
+| `/model refresh` | fetch زنده از سرور (لوکال) |
+| `/model add NAME` | افزودن مدل سفارشی |
+| `/provider` | لیست provider ها |
+| `/provider NAME` | سوییچ provider |
+| `/provider add NAME` | افزودن provider (prompt برای URL/key/model) |
+| `/provider remove NAME` | حذف provider |
+| `/system` | نمایش system prompt |
+| `/system TEXT` | تنظیم system prompt |
+| `/agent` | toggle Agent Mode |
+| `/save [NAME]` | ذخیره گفتگو |
+| `/load NAME` | بارگذاری گفتگو |
+| `/chats` | لیست گفتگوها |
+| `/history` | نمایش گفتگوی فعلی |
+| `/info` | خلاصه پیکربندی |
+| `/exit` | خروج |
 
 <details>
 <summary><b>⌨️ کلیدهای میانبر</b></summary>
@@ -153,7 +150,7 @@ AyhanX-Agent دو حالت اجرا دارد: **حالت تعاملی** (پیش�
 | `Enter` | ارسال پیام |
 | `Esc + Enter` | خط جدید |
 | `Ctrl + J` | خط جدید |
-| `↑` / `↓` | تاریخچه‌ی ورودی |
+| `↑` / `↓` | تاریخچه ورودی |
 | `Tab` | تکمیل خودکار دستور |
 | `Ctrl + C` | لغو پاسخ فعلی |
 | `Ctrl + D` | خروج |
@@ -162,177 +159,239 @@ AyhanX-Agent دو حالت اجرا دارد: **حالت تعاملی** (پیش�
 
 ---
 
-## 🛠️ ابزارهای Agent Mode
+## 🌐 Web UI
 
-در **Agent Mode**، مدل DeepSeek به‌صورت خودکار تصمیم می‌گیرد چه زمانی یک ابزار را فراخوانی کند. این قابلیت به مدل اجازه می‌دهد تا فراتر از پاسخ‌های متنی رفته و عملیات واقعی انجام دهد — از محاسبه و بررسی فایل‌سیستم تا اجرای دستورات امن شل.
+`./ai.sh web` یک رابط مرورگری کامل باز می‌کنه:
 
-با فعال کردن `/agent`، DeepSeek خودش تصمیم می‌گیره کی ابزار صدا بزنه:
+- 🎨 **Apple-style design** — spring animations, translucent materials, reduced-motion fallbacks
+- 📱 **Collapsible sidebar** — دکمه `◀` با localStorage persistence
+- 🌊 **Streaming** با markdown زنده
+- 🛠️ **Agent mode** با نمایش tool cards
+- 🔄 **Switch provider** بدون restart از modal
+- 📋 **Model picker** با لیست مدل‌های provider فعلی
+- 🎯 **Auto-port** — اگه 8080 busy بود، خودکار 8081+
+- 🌙 **Prefers-* support** — reduced-motion, reduced-transparency, contrast
+
+```bash
+./ai.sh web         # → http://localhost:8080
+./ai.sh web 9000    # → http://localhost:9000
+```
+
+---
+
+## 🛠️ ابزارهای Agent Mode (۱۰ ابزار)
+
+**Agent Mode** به مدل اجازه می‌ده فراتر از پاسخ متنی رفته و **عملیات واقعی** انجام دهد:
 
 | ابزار | کار | محدودیت |
 |---|---|---|
-| `get_current_time` | ساعت و تاریخ UTC | — |
-| `calculate` | ماشین‌حساب امن | eval ایزوله (بدون `__builtins__`) |
-| `list_directory` | لیست فایل‌ها | فقط زیر `$HOME` (Linux) یا `%USERPROFILE%` (Windows) |
-| `read_file` | خوندن فایل متنی | 10 KB |
-| `run_shell` | اجرای دستور شل | timeout 15s، دستورات مخرب بلاک |
+| `get_current_time` | ساعت UTC | — |
+| `calculate` | محاسبه امن | eval با `__builtins__` خالی |
+| `list_directory` | لیست فایل‌ها | زیر `$HOME` |
+| `read_file` | خوندن فایل | 200 KB |
+| `write_file` | ساخت/overwrite فایل | زیر `$HOME` |
+| `edit_file` | ویرایش بخشی از فایل | unique string |
+| `make_dir` | ساخت پوشه | recursive |
+| `delete_file` | حذف فایل | فقط فایل، نه پوشه |
+| `run_shell` | اجرای دستور شل | timeout 30s، دستورات مخرب بلاک |
+| `run_python` | اجرای پایتون inline | timeout 60s |
 
 <details>
-<summary><b>💡 مثال استفاده</b></summary>
+<summary><b>💡 مثال: ساخت و اجرای اسکریپت</b></summary>
 
 <br/>
 
 ```
-❯ الان ساعت چنده و 45×12 چند میشه؟
+❯ یه اسکریپت پایتون بنویس که اعداد فیبوناچی رو حساب کنه و اجراش کن
 
-  ⚙ get_current_time({})
-    └ 2024-11-13T10:30:00+00:00
-  ⚙ calculate({"expression": "45*12"})
-    └ 540
+⏺ ⚙ write_file({"path":"fib.py","content":"..."})
+   └ {"ok":true,"message":"wrote 234 bytes to /home/user/fib.py"}
+  ⚙ run_shell({"command":"python3 fib.py"})
+   └ 0 1 1 2 3 5 8 13 21 34...
 
-◆ DeepSeek
-┌────────────────────────────────────────────────────────────┐
-│ الان ساعت 10:30 UTC است و 45 × 12 = 540.                   │
-└────────────────────────────────────────────────────────────┘
+اسکریپت رو نوشتم و اجرا کردم. خروجی: 0 1 1 2 3 5 8 13 21 34
 ```
 
 </details>
 
 ---
 
-## 🔌 ارائه‌دهنده‌های پشتیبانی‌شده
+## 🔌 ارائه‌دهنده‌های پشتیبانی‌شده (۲۴ عدد)
 
-AyhanX-Agent بر پایه‌ی فرمت OpenAI-compatible API ساخته شده، بنابراین علاوه بر DeepSeek رسمی، می‌تواند با هر gateway سازگار (از جمله مدل‌های رایگان OpenRouter، Groq، یا مدل‌های لوکال Ollama) کار کند. **تشخیص خودکار provider** از پیشوند کلید یا پروب پورت‌های لوکال انجام می‌شود.
+AyhanX-Agent بر پایه‌ی **OpenAI-compatible API** ساخته شده، پس با هر سرویسی که از این فرمت پشتیبانی کنه کار می‌کنه.
 
-| ارائه‌دهنده | نوع | وضعیت |
+### ☁️ ابری
+
+| ارائه‌دهنده | Endpoint | کلید |
 |---|---|---|
-| **DeepSeek** | API رسمی | ✅ پیش‌فرض |
-| **OpenRouter** | Gateway (شامل مدل‌های free) | ✅ سازگار |
-| **Groq** | Gateway (سریع‌ترین inference) | ✅ سازگار |
-| **Ollama** | لوکال (رایگان) | ✅ سازگار |
-| **LM Studio** | لوکال (GUI-friendly) | ✅ سازگار |
-| **vLLM** | لوکال (سرور GPU) | ✅ سازگار |
-| **llama.cpp** | لوکال (سبک) | ✅ سازگار |
-| **LocalAI** | لوکال (Docker) | ✅ سازگار |
+| **DeepSeek** | `https://api.deepseek.com` | `sk-…` |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | `sk-or-…` |
+| **Groq** | `https://api.groq.com/openai/v1` | `gsk_…` |
+| **Google AI Studio** | `https://generativelanguage.googleapis.com/v1beta/openai` | `AIza…` / `AQ.…` |
+| **Mistral** | `https://api.mistral.ai/v1` | (هر) |
+| **Together AI** | `https://api.together.ai/v1` | (هر) |
+| **Fireworks AI** | `https://api.fireworks.ai/inference/v1` | `fw_…` |
+| **DeepInfra** | `https://api.deepinfra.com/v1/openai` | (هر) |
+| **Perplexity** | `https://api.perplexity.ai/v1` | `pplx-…` |
+| **xAI (Grok)** | `https://api.x.ai/v1` | `xai-…` |
+| **Cerebras** | `https://api.cerebras.ai/v1` | `csk-…` |
+| **Abacus AI** | `https://routellm.abacus.ai/v1` | (هر) |
+| **Novita AI** | `https://api.novita.ai/openai/v1` | (هر) |
+| **SiliconCloud** | `https://api.siliconflow.cn/v1` | (هر) |
+| **ByteDance Ark** | `https://ark.cn-beijing.volces.com/api/v3` | (هر) |
+| **Aliyun DashScope** | `https://dashscope.aliyuncs.com/compatible-mode/v1` | (هر) |
+| **MiniMax** | `https://api.minimax.io/v1` | (هر) |
+| **EdenAI** | `https://api.edenai.run/v3` | (هر) |
+| **NVIDIA NIM** | `https://integrate.api.nvidia.com/v1` | `nvapi-…` |
+
+### 🏠 لوکال (بدون کلید)
+
+| ارائه‌دهنده | Endpoint |
+|---|---|
+| **Ollama** | `http://localhost:11434/v1` |
+| **LM Studio** | `http://localhost:1234/v1` |
+| **vLLM** | `http://localhost:8000/v1` |
+| **llama.cpp** | `http://localhost:8080/v1` |
+| **LocalAI** | `http://localhost:8080/v1` |
+| **Ollama Cloud** | `https://ollama.com/v1` |
+
+### 🎯 تشخیص خودکار
+
+```bash
+./ai.sh --provider auto    # پروب پورت‌های لوکال
+```
+
+یا از پیشوند کلید (`sk-or-` → OpenRouter، `nvapi-` → NVIDIA، `xai-` → Grok، …).
 
 <details>
-<summary><b>🔧 نحوه سوییچ به OpenRouter یا Groq</b></summary>
+<summary><b>🔧 نحوه سوییچ سریع بین provider ها</b></summary>
 
 <br/>
 
-**OpenRouter (با مدل رایگان):**
+**از داخل چت:**
 
-```bash
-export DEEPSEEK_API_KEY="sk-or-v1-..."
-export DEEPSEEK_BASE_URL="https://openrouter.ai/api/v1"
-export DEEPSEEK_MODEL="deepseek/deepseek-chat-v3-0324:free"
-./ai.sh
+```
+❯ /provider
+  providers   deepseek ◆  openrouter  groq  google  mistral  nvidia  …
+
+❯ /provider nvidia
+  → switched to NVIDIA NIM
+  · model    meta/llama-3.1-8b-instruct
+  · endpoint https://integrate.api.nvidia.com/v1
+
+❯ hello
 ```
 
-**Groq (سریع‌ترین inference):**
+**از CLI:**
 
 ```bash
-export DEEPSEEK_API_KEY="gsk_..."
-export DEEPSEEK_BASE_URL="https://api.groq.com/openai/v1"
-export DEEPSEEK_MODEL="llama-3.3-70b-versatile"
-./ai.sh
+./ai.sh switch mistral
+./ai.sh switch nvidia
+./ai.sh switch xai
+./ai.sh switch together
 ```
 
-**یا با فلگ `--provider`:**
+**از post-chat menu:** `p` بزن و انتخاب کن.
 
-```bash
-./ai.sh --provider openrouter
-./ai.sh --provider groq
+**اضافه کردن provider جدید:**
+
+```
+❯ /provider add my-custom
+  url: https://api.example.com/v1
+  key: xxxxx
+  model: model-name
+  ✔ my-custom added
 ```
 
 </details>
 
-<details>
-<summary><b>🏠 نحوه استفاده از مدل‌های لوکال</b></summary>
+---
 
-<br/>
+## 🍎 Apple Design Principles
 
-**Ollama (کاملاً لوکال — ساده‌ترین):**
+این پروژه از **Apple's Fluid Interfaces** (WWDC 2018) الهام گرفته و اصول آن را در وب پیاده‌سازی می‌کند. جزئیات کامل در [DESIGN.md](./DESIGN.md) در ریشه ریپو موجود است.
 
-```bash
-# ابتدا Ollama نصب و مدل دانلود کن
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen2.5:3b
+**اصول کلیدی اعمال‌شده:**
 
-# سپس با AyhanX-Agent استفاده کن
-export DEEPSEEK_API_KEY="ollama"
-export DEEPSEEK_BASE_URL="http://localhost:11434/v1"
-export DEEPSEEK_MODEL="qwen2.5:3b"
-./ai.sh
-```
+| اصل | پیاده‌سازی |
+|---|---|
+| **Response** | Feedback on `:active`, not `click` |
+| **Interruptibility** | Spring-based animations از مقدار فعلی شروع می‌شن |
+| **Velocity Handoff** | Drag-to-close با spring که finger velocity رو حفظ می‌کنه |
+| **Momentum Projection** | `project(v, 0.998)` برای flick در sidebar |
+| **Rubber-banding** | Resist progressively در edges، نه hard-stop |
+| **Translucent Materials** | `backdrop-filter: blur(24px) saturate(180%)` روی header/composer |
+| **Spatial Consistency** | Modals از center scale می‌شن، نه از trigger |
+| **Reduced Motion** | `@media (prefers-reduced-motion: reduce)` → cross-fade only |
+| **Reduced Transparency** | `@media (prefers-reduced-transparency: reduce)` → solid backgrounds |
+| **Typography** | `font-optical-sizing: auto`, negative tracking on display |
 
-**LM Studio:** از [lmstudio.ai](https://lmstudio.ai) نصب کن، مدل GGUF دانلود کن، Local Server روشن کن (پورت `1234`)، سپس `./ai.sh --provider lmstudio`
-
-**vLLM / llama.cpp / LocalAI:** با همان الگو — سرور را روی پورت پیش‌فرض بالا بیاور و `./ai.sh --provider vllm` (یا `llamacpp`/`localai`) بزن.
-
-**auto-detect:** اگه نمی‌دونی کدوم لوکال در حال اجراست، `./ai.sh --provider auto` همه‌ی پورت‌های شناخته‌شده را پروب می‌کند.
-
-</details>
+**DESIGN.md خودکار:** اسکریپت `DESIGN.md` رو از ریپو fetch می‌کنه و توی `~/.ai_platform/DESIGN.md` cache می‌کنه. AI Agent هم principles رو در system prompt خودش داره — وقتی می‌خوای UI بسازی، خودش اصول رو اعمال می‌کنه.
 
 ---
 
 ## 🔧 پیش‌نیازها
 
-- Ubuntu، Debian یا هر توزیع لینوکسی با `apt`، `dnf`، `yum`، `apk` یا `pacman`
-- Windows 10+ با PowerShell 5.1+ (برای نسخه‌ی `ai.ps1`)
+### 🐧 Linux
+- Ubuntu، Debian یا هر توزیع با `apt`، `dnf`، `yum`، `apk` یا `pacman`
 - `bash` (4.0+)، `curl`
-- **Python 3.10–3.13** (اگه نبود، خودکار از طریق `uv` یا winget نصب می‌شه)
-- کلید API از DeepSeek (یا ارائه‌دهنده سازگار) — **یا هیچ کلیدی برای لوکال**
+- **Python 3.10–3.13** (خودکار از طریق `uv` نصب می‌شه)
+
+### 🪟 Windows
+- Windows 10+ با PowerShell 5.1+
+- **Python 3.10–3.13** (اسکریپت خودکار نصب می‌کنه)
+
+### 🔑 کلید API
+- از هر provider انتخابی — **یا هیچ کلیدی برای لوکال‌ها**
 
 ---
 
 ## 🔐 امنیت
 
-امنیت در AyhanX-Agent در سه لایه پیاده‌سازی شده است: **امنیت کلید**، **امنیت فایل‌سیستم**، و **امنیت اجرای دستورات**. هر لایه به‌صورت مستقل محافظت می‌شود تا حتی در صورت سوءاستفاده از یک لایه، بقیه‌ی سیستم آسیب نبیند.
+امنیت در سه لایه: **کلید**، **فایل‌سیستم**، و **اجرای دستورات**.
 
-- 💾 **ذخیره امن کلید**: `~/.ai_platform/.env` با `chmod 600`، ورودی مخفی بدون نمایش در ترمینال
-- 🛡️ **فایل‌سیستم ایزوله**: `read_file` و `list_directory` فقط زیر `$HOME` (Linux) یا `%USERPROFILE%` (Windows) کار می‌کنن (path traversal بلاک)
-- 🧮 **محاسبه امن**: `calculate` از `eval` با `__builtins__` خالی استفاده می‌کنه
-- 🚫 **شل بلاک‌شده**: `run_shell` دستورات مخرب مثل `rm -rf /`، `mkfs`، `dd if=/dev/zero`، `del /f /s /q c:\` رو رد می‌کنه
-- ⏱️ **timeout شل**: حداکثر ۱۵ ثانیه اجرا، خروجی محدود به ۵ KB
-- 🏠 **لوکال = خصوصی**: مدل‌های لوکال اصلاً به اینترنت وصل نمی‌شن
-- ⚠️ **توجه**: هرگز `.env` رو commit نکن — توی `.gitignore` بذار
+- 💾 **ذخیره امن کلید**: `~/.ai_platform/providers.json` با `chmod 600`، ورودی مخفی
+- 🛡️ **فایل‌سیستم ایزوله**: همه‌ی مسیرها به `$HOME` (Linux) یا `%USERPROFILE%` (Windows) محدودن (path traversal بلاک)
+- 🧮 **محاسبه امن**: `calculate` از `eval` با `__builtins__` خالی
+- 🚫 **شل بلاک‌شده**: دستورات مخرب مثل `rm -rf /`، `mkfs`، `dd if=/dev/zero` رد می‌شن
+- ⏱️ **timeout**: شل ۳۰ ثانیه، پایتون ۶۰ ثانیه
+- 🏠 **لوکال = خصوصی**: مدل‌های لوکال به اینترنت وصل نمی‌شن
+- ⚠️ **`.env` و `providers.json`** رو هرگز commit نکن
 
 ---
 
 ## ⚠️ محدودیت‌ها
 
-این پروژه با وجود طراحی دقیق، در برخی سناریوها محدودیت‌هایی دارد که شفاف‌سازی آن‌ها بخشی از تعهد پروژه به شفافیت است:
-
 - ✅ **Linux** تست شده — ✅ **Windows 10/11** (PowerShell 5.1+)
 - ⚠️ **macOS** پشتیبانی رسمی نداره (ولی اسکریپت Bash باید کار کنه)
-- DeepSeek API **رایگان نیست** — برای رفع خطای `HTTP 402` باید [شارژ کنی](https://platform.deepseek.com/top_up)
-- **OpenRouter** و **Groq** هر دو مدل رایگان دارن — بدون شارژ هم کار می‌کنن
-- `deepseek-reasoner` روی همه‌ی حساب‌ها فعال نیست
-- **Tool calling** روی همه‌ی مدل‌های لوکال کار نمی‌کنه — مدل باید پشتیبانی کنه (مثل `qwen2.5`، `llama3.3`، `deepseek-r1`)
-- ابزار `run_shell` فقط دستورات امن رو اجرا می‌کنه — اگه نیاز به دستور خاصی داری، توی issue بگو
-- مدل‌های سفارشی از طریق OpenRouter ممکنه tool calling رو کامل پشتیبانی نکنن
+- **DeepSeek API** رایگان نیست — برای `HTTP 402` باید شارژ کنی
+- **OpenRouter**، **Groq**، **NVIDIA NIM** مدل رایگان دارن — بدون شارژ کار می‌کنن
+- **Tool calling** روی همه‌ی مدل‌های لوکال کار نمی‌کنه — مدل باید پشتیبانی کنه (`qwen2.5`، `llama3.3`، `deepseek-r1`)
+- بعضی provider ها (Perplexity) tool calling کامل ندارن
+- مدل‌های بزرگ (70B) روی NVIDIA NIM cold-start طولانی دارن
 
 ---
 
 ## 📁 ساختار فایل‌ها
 
-تمام داده‌های برنامه (کلید API، تنظیمات، گفتگوها و کد پایتون) در یک مسیر واحد و مستقل از پروژه‌ی اصلی ذخیره می‌شوند. این کار باعث می‌شود به‌روزرسانی اسکریپت هیچ‌گاه به داده‌های شما آسیب نزند.
-
-همه‌چیز داخل `~/.ai_platform/` ذخیره می‌شه (روی Windows: `%USERPROFILE%\.ai_platform\`):
+همه‌چیز داخل `~/.ai_platform/` (روی Windows: `%USERPROFILE%\.ai_platform\`):
 
 ```
 ~/.ai_platform/
-├── .env              # کلید API (chmod 600)
-├── config.json       # مدل، system prompt، حالت agent، مدل‌های سفارشی
-├── provider          # provider فعال (deepseek/openrouter/groq/ollama/…)
-├── history.txt       # تاریخچه‌ی ↑↓
+├── .env              # کلید API پیش‌فرض (chmod 600)
+├── config.json       # مدل، system prompt، حالت agent
+├── providers.json    # همه‌ی provider ها با کلیدها (chmod 600)
+├── provider          # provider فعال
+├── DESIGN.md         # Apple design principles (auto-fetched)
+├── history.txt       # تاریخچه ↑↓
 ├── install.log       # لاگ نصب
 ├── runner/
 │   ├── __init__.py
-│   ├── tools.py      # پیاده‌سازی ۵ ابزار
-│   └── tui.py        # رابط ترمینالی (prompt_toolkit + Rich)
+│   ├── tools.py      # پیاده‌سازی ۱۰ ابزار
+│   ├── tui.py        # رابط ترمینالی (prompt_toolkit + Rich)
+│   └── server.py     # وب UI (FastAPI + HTML)
 ├── chats/
-│   ├── last.json     # آخرین گفتگو (برای resume)
+│   ├── last.json     # آخرین گفتگو (resume)
 │   └── *.json        # گفتگوهای ذخیره‌شده
 └── .venv/            # محیط مجازی Python
 ```
@@ -340,8 +399,6 @@ export DEEPSEEK_MODEL="qwen2.5:3b"
 ---
 
 ## 🩺 بررسی اتصال
-
-قبل از شروع استفاده، می‌توانید با یک دستور ساده سلامت اتصال به API را بررسی کنید. این ابزار خروجی دقیقی از وضعیت endpoint، مدل، و پاسخ سرور ارائه می‌دهد.
 
 ```bash
 ./ai.sh health
@@ -351,14 +408,15 @@ export DEEPSEEK_MODEL="qwen2.5:3b"
 
 ```
   ▍Connection check
-  endpoint  https://api.deepseek.com
-  model     deepseek-chat
+  provider  nvidia
+  endpoint  https://integrate.api.nvidia.com/v1
+  model     meta/llama-3.1-8b-instruct
   status    200
   reply     'OK'
   ✔ connected
 ```
 
-خروجی موفق (لوکال — Ollama):
+خروجی موفق (لوکال):
 
 ```
   ▍Connection check
@@ -373,67 +431,103 @@ export DEEPSEEK_MODEL="qwen2.5:3b"
 
 | کد | معنی | راه‌حل |
 |:-:|---|---|
-| `200` | ✅ همه چیز اوکیه | آماده‌ای برای چت |
-| `401` | کلید نامعتبر | [کلید جدید بساز](https://platform.deepseek.com/api_keys) |
-| `402` | حساب شارژ نداره | [top_up](https://platform.deepseek.com/top_up) |
+| `200` | ✅ همه چیز اوکیه | آماده‌ی چت |
+| `401` | کلید نامعتبر | از سایت provider کلید جدید بگیر |
+| `402` | حساب شارژ نداره | top_up کن |
+| `404` | مدل پیدا نشد | `/model` یا `/model refresh` |
 | `429` | Rate limit | چند لحظه صبر کن |
-| DNS error | اینترنت/DNS خراب | `echo "nameserver 1.1.1.1" > /etc/resolv.conf` |
 | `ConnectionError` | سرور لوکال بالا نیست | Ollama/LM Studio رو استارت کن |
+| DNS error | اینترنت/DNS خراب | `echo "nameserver 1.1.1.1" > /etc/resolv.conf` |
 
 ---
 
-## 🔗 **لینک‌های مفید**
+## 🔗 لینک‌های مفید
 
 | منبع | آدرس |
 |---|---|
-| مخزن این پروژه | [AyhanMansur/AyhanX-Agent](https://github.com/AyhanMansur/AyhanX-Agent) |
-| پلتفرم DeepSeek | [platform.deepseek.com](https://platform.deepseek.com) |
-| مستندات DeepSeek API | [api-docs.deepseek.com](https://api-docs.deepseek.com) |
-| OpenRouter | [openrouter.ai](https://openrouter.ai) |
-| Groq | [console.groq.com](https://console.groq.com) |
-| Ollama | [ollama.com](https://ollama.com) |
-| LM Studio | [lmstudio.ai](https://lmstudio.ai) |
-| vLLM | [docs.vllm.ai](https://docs.vllm.ai) |
-| llama.cpp | [github.com/ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) |
-| LocalAI | [localai.io](https://localai.io) |
+| **مخزن این پروژه** | [AyhanMansur/AyhanX-Agent](https://github.com/AyhanMansur/AyhanX-Agent) |
+| **DESIGN.md** | [DESIGN.md](./DESIGN.md) |
+| **DeepSeek** | [platform.deepseek.com](https://platform.deepseek.com) |
+| **OpenRouter** | [openrouter.ai](https://openrouter.ai) |
+| **Groq** | [console.groq.com](https://console.groq.com) |
+| **Google AI Studio** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| **Mistral** | [console.mistral.ai](https://console.mistral.ai) |
+| **Together AI** | [api.together.ai](https://api.together.ai) |
+| **Fireworks AI** | [fireworks.ai](https://fireworks.ai) |
+| **DeepInfra** | [deepinfra.com](https://deepinfra.com) |
+| **Perplexity** | [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api) |
+| **xAI (Grok)** | [console.x.ai](https://console.x.ai) |
+| **Cerebras** | [cloud.cerebras.ai](https://cloud.cerebras.ai) |
+| **Abacus AI** | [abacus.ai](https://abacus.ai) |
+| **Novita AI** | [novita.ai](https://novita.ai) |
+| **SiliconCloud** | [siliconflow.cn](https://siliconflow.cn) |
+| **ByteDance Ark** | [console.volcengine.com/ark](https://console.volcengine.com/ark) |
+| **Aliyun DashScope** | [dashscope.aliyun.com](https://dashscope.aliyun.com) |
+| **MiniMax** | [platform.minimax.io](https://platform.minimax.io) |
+| **EdenAI** | [edenai.co](https://www.edenai.co) |
+| **NVIDIA NIM** | [build.nvidia.com](https://build.nvidia.com) |
+| **Ollama** | [ollama.com](https://ollama.com) |
+| **LM Studio** | [lmstudio.ai](https://lmstudio.ai) |
+| **vLLM** | [docs.vllm.ai](https://docs.vllm.ai) |
+| **llama.cpp** | [github.com/ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) |
+| **LocalAI** | [localai.io](https://localai.io) |
 
 ---
 
-## 🤝 **مشارکت!**
+## 🤝 مشارکت!
 
-این پروژه به‌صورت متن‌باز توسعه می‌یابد و هر نوع کمک — از گزارش باگ تا افزودن قابلیت جدید — ارزشمند است.
+این پروژه متن‌بازه و هر نوع کمک — از گزارش باگ تا افزودن provider جدید — ارزشمنده.
 
-* یک **Issue** باز کنید
-* یک **Pull Request** بفرستید
-* یا یک **Star** ⭐ بدهید تا دیگران هم پیدا کنند!
+- 🐛 یک **Issue** باز کن
+- 🔀 یک **Pull Request** بفرست
+- ⭐ یک **Star** بده تا دیگران هم پیدا کنن
 
 <details>
 <summary><b>🛣️ نقشه‌ی راه</b></summary>
 
 <br/>
 
+**انجام‌شده ✅**
+
 - [x] چت ترمینالی با streaming
-- [x] Agent Mode با ۵ ابزار
+- [x] Agent Mode با ۱۰ ابزار (فایل + شل + پایتون)
 - [x] ذخیره/بارگذاری گفتگو
 - [x] مدل‌های سفارشی
 - [x] Resume گفتگوی قبلی
 - [x] Bottom toolbar زنده
-- [x] **OpenRouter support** — مدل‌های رایگان
-- [x] **Groq support** — سریع‌ترین inference
-- [x] **Ollama / LM Studio / vLLM / llama.cpp / LocalAI** — لوکال
-- [x] **Auto-detect local server** — `--provider auto`
-- [x] **Windows PowerShell client** — `ai.ps1`
-- [ ] تم‌های رنگی متعدد
+- [x] OpenRouter support
+- [x] Groq support
+- [x] Google AI Studio support
+- [x] Mistral, Together, Fireworks, DeepInfra support
+- [x] Perplexity, xAI, Cerebras, Abacus support
+- [x] Novita, SiliconCloud, ByteDance, Aliyun support
+- [x] MiniMax, EdenAI, **NVIDIA NIM** support
+- [x] Ollama, LM Studio, vLLM, llama.cpp, LocalAI support
+- [x] Ollama Cloud support
+- [x] Auto-detect local server (`--provider auto`)
+- [x] Windows PowerShell client (`ai.ps1`)
+- [x] **Web UI** با طراحی Apple-style
+- [x] **Auto-port** در Web UI
+- [x] **Collapsible sidebar** با localStorage
+- [x] **Apple Design principles** (springs، velocity، reduced-motion)
+- [x] **DESIGN.md** خودکار از ریپو
+- [x] **Switch provider** از CLI، TUI، و Web UI
+- [x] **Multi-provider** در `providers.json`
+
+**در حال کار 🚧**
+
+- [ ] تم‌های رنگی متعدد (light/dark/auto)
 - [ ] Export به Markdown
 - [ ] macOS native support
 - [ ] حالت `--json` برای اسکریپت‌نویسی
 - [ ] پلاگین برای tool های سفارشی کاربر
+- [ ] RAG (پیوست فایل)
 
 </details>
 
 ---
 
-## 📜 **مجوز**
+## 📜 مجوز
 
 این پروژه تحت مجوز **MIT** منتشر شده است: آزاد برای استفاده، تغییر و توزیع.
 
@@ -444,5 +538,3 @@ export DEEPSEEK_MODEL="qwen2.5:3b"
 <p>
   <b>ساخته‌شده با ❤️ توسط Ayhan Mansur</b>
 </p>
-
-</div>
