@@ -1,7 +1,6 @@
 
 <div align="center">
-<img width="1856" height="930" alt="AyhanX-Agent" src="https://github.com/user-attachments/assets/4ebae04f-f60f-4abf-9e57-5d145b674f0f"/>
-<a href="https://github.com/AyhanMansur/AyhanX-Agent">
+<img width="1856" height="930" alt="AyhanX-Agent" src="https://github.com/user-attachments/assets/fc0c67f3-4952-4ffa-a774-d7c6925ca731">
   <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1200&color=40E0D0&center=true&vCenter=true&width=680&lines=AyhanX-Agent;Premium+terminal+chat+for+all+LLMs;24+providers+%7C+Apple-style+UI;Streaming+%7C+Agent+Mode+%7C+Web+UI;One+file.+Zero+config." alt="Typing animation"/>
 </a>
 <br/>
