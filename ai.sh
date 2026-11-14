@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
 # ============================================================================
-#   AyhanX-Agent · terminal + web client for cloud & local LLMs
+#   AyhanX-Agent · universal terminal + web client for LLMs
 #   Repository:  https://github.com/AyhanMansur/AyhanX-Agent
-#   Version:     4.0.1
-#
-#   Usage:
-#     ./ai.sh                    chat (terminal)
-#     ./ai.sh web [port]         web UI at http://localhost:8080
-#     ./ai.sh switch <name>      switch provider and exit
-#     ./ai.sh ask "prompt"       one-shot answer
-#     ./ai.sh health             test API connection
-#     ./ai.sh config             show file locations
-#     ./ai.sh version            print version
+#   Version:     5.0.0
+#   23 providers: deepseek · openrouter · groq · google · mistral · together
+#                 fireworks · deepinfra · perplexity · xai · cerebras · abacus
+#                 novita · siliconcloud · bytedance · aliyun · minimax · edenai
+#                 ollama-cloud · ollama · lmstudio · vllm · llamacpp · localai
 # ============================================================================
 set -euo pipefail
 
-VERSION="4.0.1"
+VERSION="5.0.0"
 REPO_URL="https://github.com/AyhanMansur/AyhanX-Agent"
+DESIGN_URL="https://raw.githubusercontent.com/AyhanMansur/AyhanX-Agent/refs/heads/main/DESIGN.md"
 APP_DIR="${HOME}/.ai_platform"
 VENV="${APP_DIR}/.venv"
 RUNNER_DIR="${APP_DIR}/runner"
@@ -27,9 +23,10 @@ CHATS_DIR="${APP_DIR}/chats"
 LOG_FILE="${APP_DIR}/install.log"
 PROVIDER_FILE="${APP_DIR}/provider"
 PROVIDERS_FILE="${APP_DIR}/providers.json"
+DESIGN_FILE="${APP_DIR}/DESIGN.md"
 export AI_RUNNER_VERSION="$VERSION"
 
-# ---------- palette (B1-B4 + V1-V2 + all) ----------
+# ---------- palette ----------
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   E=$'\e'
   B1="${E}[38;5;33m"; B2="${E}[38;5;39m"; B3="${E}[38;5;45m"; B4="${E}[38;5;51m"
@@ -50,61 +47,110 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # ============================================================================
-#  PROVIDER HELPERS
+#  PROVIDER HELPERS (23 providers)
 # ============================================================================
 is_local_provider() {
   case "$1" in
-    ollama|lmstudio|vllm|llamacpp|localai) return 0 ;;
+    ollama|lmstudio|vllm|llamacpp|localai|ollama-cloud) return 0 ;;
     *) return 1 ;;
   esac
 }
 
 provider_of_key() {
   case "${1:-}" in
-    sk-or-*)  echo "openrouter" ;;
-    gsk_*)    echo "groq" ;;
-    sk-*)     echo "deepseek" ;;
-    AIza*|AQ.*) echo "google" ;;
-    *)        echo "" ;;
+    sk-or-*)      echo "openrouter" ;;
+    gsk_*)        echo "groq" ;;
+    fw_*)         echo "fireworks" ;;
+    pplx-*)       echo "perplexity" ;;
+    xai-*)        echo "xai" ;;
+    csk-*)        echo "cerebras" ;;
+    AIza*|AQ.*)   echo "google" ;;
+    sk-*)         echo "deepseek" ;;
+    *)            echo "" ;;
   esac
 }
 
 provider_url() {
   case "$1" in
-    openrouter) echo "https://openrouter.ai/api/v1" ;;
-    groq)       echo "https://api.groq.com/openai/v1" ;;
-    google)     echo "https://generativelanguage.googleapis.com/v1beta/openai" ;;
-    ollama)     echo "${OLLAMA_URL:-http://localhost:11434/v1}" ;;
-    lmstudio)   echo "${LMSTUDIO_URL:-http://localhost:1234/v1}" ;;
-    vllm)       echo "${VLLM_URL:-http://localhost:8000/v1}" ;;
-    llamacpp)   echo "${LLAMACPP_URL:-http://localhost:8080/v1}" ;;
-    localai)    echo "${LOCALAI_URL:-http://localhost:8080/v1}" ;;
-    *)          echo "https://api.deepseek.com" ;;
+    openrouter)   echo "https://openrouter.ai/api/v1" ;;
+    groq)         echo "https://api.groq.com/openai/v1" ;;
+    google)       echo "https://generativelanguage.googleapis.com/v1beta/openai" ;;
+    mistral)      echo "https://api.mistral.ai/v1" ;;
+    together)     echo "https://api.together.ai/v1" ;;
+    fireworks)    echo "https://api.fireworks.ai/inference/v1" ;;
+    deepinfra)    echo "https://api.deepinfra.com/v1/openai" ;;
+    perplexity)   echo "https://api.perplexity.ai/v1" ;;
+    xai)          echo "https://api.x.ai/v1" ;;
+    cerebras)     echo "https://api.cerebras.ai/v1" ;;
+    abacus)       echo "https://routellm.abacus.ai/v1" ;;
+    novita)       echo "https://api.novita.ai/openai/v1" ;;
+    siliconcloud) echo "https://api.siliconflow.cn/v1" ;;
+    bytedance)    echo "https://ark.cn-beijing.volces.com/api/v3" ;;
+    aliyun)       echo "https://dashscope.aliyuncs.com/compatible-mode/v1" ;;
+    minimax)      echo "https://api.minimax.io/v1" ;;
+    edenai)       echo "https://api.edenai.run/v3" ;;
+    ollama-cloud) echo "https://ollama.com/v1" ;;
+    ollama)       echo "${OLLAMA_URL:-http://localhost:11434/v1}" ;;
+    lmstudio)     echo "${LMSTUDIO_URL:-http://localhost:1234/v1}" ;;
+    vllm)         echo "${VLLM_URL:-http://localhost:8000/v1}" ;;
+    llamacpp)     echo "${LLAMACPP_URL:-http://localhost:8080/v1}" ;;
+    localai)      echo "${LOCALAI_URL:-http://localhost:8080/v1}" ;;
+    *)            echo "https://api.deepseek.com" ;;
   esac
 }
 
 provider_default_model() {
   case "$1" in
-    openrouter) echo "deepseek/deepseek-chat" ;;
-    groq)       echo "llama-3.3-70b-versatile" ;;
-    google)     echo "gemini-2.5-flash" ;;
-    ollama)     echo "qwen2.5:3b" ;;
+    openrouter)   echo "deepseek/deepseek-chat" ;;
+    groq)         echo "llama-3.3-70b-versatile" ;;
+    google)       echo "gemini-2.5-flash" ;;
+    mistral)      echo "mistral-large-latest" ;;
+    together)     echo "meta-llama/Llama-3.3-70B-Instruct-Turbo" ;;
+    fireworks)    echo "accounts/fireworks/models/llama-v3p1-8b-instruct" ;;
+    deepinfra)    echo "meta-llama/Meta-Llama-3.1-70B-Instruct" ;;
+    perplexity)   echo "sonar-pro" ;;
+    xai)          echo "grok-2-latest" ;;
+    cerebras)     echo "llama3.1-8b" ;;
+    abacus)       echo "gpt-4o" ;;
+    novita)       echo "meta-llama/llama-3.1-8b-instruct" ;;
+    siliconcloud) echo "Qwen/Qwen2.5-7B-Instruct" ;;
+    bytedance)    echo "doubao-pro-4k" ;;
+    aliyun)       echo "qwen-plus" ;;
+    minimax)      echo "abab6.5s-chat" ;;
+    edenai)       echo "openai/gpt-4o" ;;
+    ollama-cloud) echo "llama3.2" ;;
+    ollama)       echo "qwen2.5:3b" ;;
     lmstudio|vllm|llamacpp|localai) echo "local-model" ;;
-    *)          echo "deepseek-chat" ;;
+    *)            echo "deepseek-chat" ;;
   esac
 }
 
 provider_label() {
   case "$1" in
-    openrouter) echo "OpenRouter" ;;
-    groq)       echo "Groq" ;;
-    google)     echo "Google AI Studio" ;;
-    ollama)     echo "Ollama" ;;
-    lmstudio)   echo "LM Studio" ;;
-    vllm)       echo "vLLM" ;;
-    llamacpp)   echo "llama.cpp" ;;
-    localai)    echo "LocalAI" ;;
-    *)          echo "DeepSeek" ;;
+    openrouter)   echo "OpenRouter" ;;
+    groq)         echo "Groq" ;;
+    google)       echo "Google AI Studio" ;;
+    mistral)      echo "Mistral" ;;
+    together)     echo "Together AI" ;;
+    fireworks)    echo "Fireworks AI" ;;
+    deepinfra)    echo "DeepInfra" ;;
+    perplexity)   echo "Perplexity" ;;
+    xai)          echo "xAI (Grok)" ;;
+    cerebras)     echo "Cerebras" ;;
+    abacus)       echo "Abacus AI" ;;
+    novita)       echo "Novita AI" ;;
+    siliconcloud) echo "SiliconCloud" ;;
+    bytedance)    echo "ByteDance Ark" ;;
+    aliyun)       echo "Aliyun DashScope" ;;
+    minimax)      echo "MiniMax" ;;
+    edenai)       echo "EdenAI" ;;
+    ollama-cloud) echo "Ollama Cloud" ;;
+    ollama)       echo "Ollama" ;;
+    lmstudio)     echo "LM Studio" ;;
+    vllm)         echo "vLLM" ;;
+    llamacpp)     echo "llama.cpp" ;;
+    localai)      echo "LocalAI" ;;
+    *)            echo "DeepSeek" ;;
   esac
 }
 
@@ -247,6 +293,17 @@ pick_pypi_mirror() {
   return 1
 }
 
+fetch_design_md() {
+  if [[ ! -f "$DESIGN_FILE" ]]; then
+    info "fetching DESIGN.md from repo…"
+    if timeout 10 curl -sSfL "$DESIGN_URL" -o "$DESIGN_FILE" 2>/dev/null; then
+      ok "DESIGN.md cached at $DESIGN_FILE"
+    else
+      warn "could not fetch DESIGN.md"
+    fi
+  fi
+}
+
 ensure_env() {
   section "Environment"
   mkdir -p "$APP_DIR" "$RUNNER_DIR" "$CHATS_DIR"
@@ -274,7 +331,7 @@ ensure_env() {
   if (( rebuild )); then
     local mirror host
     if ! mirror="$(pick_pypi_mirror)"; then
-      err "no PyPI mirror reachable — check DNS or internet"
+      err "no PyPI mirror reachable"
       info "try: echo 'nameserver 1.1.1.1' > /etc/resolv.conf"; exit 1
     fi
     host="$(echo "$mirror" | awk -F/ '{print $3}')"
@@ -288,6 +345,8 @@ ensure_env() {
   else
     ok "runtime ready"
   fi
+
+  fetch_design_md
 }
 
 ensure_key() {
@@ -299,14 +358,29 @@ ensure_key() {
     provider="$AYHANX_PROVIDER"
   elif [[ -n "${DEEPSEEK_BASE_URL:-}" ]]; then
     case "$DEEPSEEK_BASE_URL" in
-      *openrouter*) provider="openrouter" ;;
-      *groq*)       provider="groq" ;;
+      *openrouter*)  provider="openrouter" ;;
+      *groq*)        provider="groq" ;;
       *generativelanguage*) provider="google" ;;
-      *:11434*)     provider="ollama" ;;
-      *:1234*)      provider="lmstudio" ;;
-      *:8000*)      provider="vllm" ;;
-      *:8080*)      provider="llamacpp" ;;
-      *deepseek*)   provider="deepseek" ;;
+      *mistral*)     provider="mistral" ;;
+      *together*)    provider="together" ;;
+      *fireworks*)   provider="fireworks" ;;
+      *deepinfra*)   provider="deepinfra" ;;
+      *perplexity*)  provider="perplexity" ;;
+      *.x.ai*)       provider="xai" ;;
+      *cerebras*)    provider="cerebras" ;;
+      *abacus*)      provider="abacus" ;;
+      *novita*)      provider="novita" ;;
+      *siliconflow*) provider="siliconcloud" ;;
+      *volces*)      provider="bytedance" ;;
+      *dashscope*)   provider="aliyun" ;;
+      *minimax*)     provider="minimax" ;;
+      *edenai*)      provider="edenai" ;;
+      *ollama.com*)  provider="ollama-cloud" ;;
+      *:11434*)      provider="ollama" ;;
+      *:1234*)       provider="lmstudio" ;;
+      *:8000*)       provider="vllm" ;;
+      *:8080*)       provider="llamacpp" ;;
+      *deepseek*)    provider="deepseek" ;;
     esac
   fi
 
@@ -369,11 +443,8 @@ PYSEED
 write_tools() {
   mkdir -p "$RUNNER_DIR"
   cat > "$RUNNER_DIR/tools.py" <<'PYEOF'
-"""AyhanX-Agent — full-power tools (filesystem + shell + python)."""
-import json
-import os
-import subprocess
-import tempfile
+"""AyhanX-Agent — full-power tools."""
+import json, os, subprocess, tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -383,9 +454,7 @@ TOOL_SPECS = [
         "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "calculate",
         "description": "Evaluate a simple arithmetic expression.",
-        "parameters": {"type": "object", "properties": {
-            "expression": {"type": "string", "description": "e.g. '2 + 3 * 4'"}},
-            "required": ["expression"]}}},
+        "parameters": {"type": "object", "properties": {"expression": {"type": "string"}}, "required": ["expression"]}}},
     {"type": "function", "function": {"name": "list_directory",
         "description": "List files in a directory under the user's home.",
         "parameters": {"type": "object", "properties": {"path": {"type": "string"}}}}},
@@ -393,31 +462,26 @@ TOOL_SPECS = [
         "description": "Read the full content of a text file under the user's home.",
         "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
     {"type": "function", "function": {"name": "write_file",
-        "description": ("Create or overwrite a text file. Creates parent directories. "
-                        "Use this to actually write code, not just show it."),
+        "description": "Create or overwrite a text file. Creates parent directories. Actually writes and runs code.",
         "parameters": {"type": "object", "properties": {
-            "path": {"type": "string", "description": "relative path e.g. 'projects/app.py'"},
-            "content": {"type": "string"}}, "required": ["path", "content"]}}},
+            "path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}},
     {"type": "function", "function": {"name": "edit_file",
         "description": "Replace an exact string in a file. old_string must be unique.",
         "parameters": {"type": "object", "properties": {
             "path": {"type": "string"}, "old_string": {"type": "string"},
             "new_string": {"type": "string"}}, "required": ["path", "old_string", "new_string"]}}},
     {"type": "function", "function": {"name": "make_dir",
-        "description": "Create a directory (and parents) under the user's home.",
+        "description": "Create a directory (and parents).",
         "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
     {"type": "function", "function": {"name": "delete_file",
-        "description": "Delete a file (not a directory) under the user's home.",
+        "description": "Delete a file (not a directory).",
         "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
     {"type": "function", "function": {"name": "run_shell",
-        "description": ("Run a shell command in the user's home directory. "
-                        "Use for scripts, installs, git, tests. Returns stdout+stderr+exit code. "
-                        "NEVER use destructive commands (rm -rf /, mkfs, dd if=/dev/zero)."),
+        "description": "Run a shell command in the user's home directory. Returns stdout+stderr+exit code.",
         "parameters": {"type": "object", "properties": {
-            "command": {"type": "string"}, "timeout": {"type": "integer"}},
-            "required": ["command"]}}},
+            "command": {"type": "string"}, "timeout": {"type": "integer"}}, "required": ["command"]}}},
     {"type": "function", "function": {"name": "run_python",
-        "description": "Write Python code to a temp file, run with python3, return output.",
+        "description": "Run Python code via python3 (temp file). Returns output.",
         "parameters": {"type": "object", "properties": {"code": {"type": "string"}}, "required": ["code"]}}},
 ]
 
@@ -430,11 +494,10 @@ def _safe_resolve(p):
     return t
 
 def _err(m): return json.dumps({"error": m})
-def _ok(m, **extra): return json.dumps({"ok": True, "message": m, **extra})
+def _ok(m, **ex): return json.dumps({"ok": True, "message": m, **ex})
 
 BLOCKED = ("rm -rf /", "rm -rf /*", "mkfs", ":(){", "dd if=/dev/zero",
            "> /dev/sda", "chmod -R 000 /", ":(){:|:&};:")
-
 def _is_destructive(cmd):
     c = cmd.lower()
     return any(p in c for p in BLOCKED)
@@ -443,17 +506,17 @@ def tool_get_current_time(_a): return datetime.now(timezone.utc).isoformat()
 
 def tool_calculate(a):
     e = a.get("expression", "").strip()
-    if not e: return _err("empty expression")
+    if not e: return _err("empty")
     if any(ch not in "0123456789+-*/(). " for ch in e): return _err(f"bad char in {e!r}")
     try: return str(eval(e, {"__builtins__": {}}, {}))
-    except Exception as ex: return _err(f"failed: {ex}")
+    except Exception as ex: return _err(str(ex))
 
 def tool_list_directory(a):
     rel = a.get("path", "").strip()
     try: t = _safe_resolve(rel)
     except ValueError as e: return _err(str(e))
     if not t.exists(): return _err(f"not found: {t}")
-    if not t.is_dir(): return _err(f"not a directory: {t}")
+    if not t.is_dir(): return _err(f"not a dir: {t}")
     try: items = sorted(t.iterdir())
     except PermissionError: return _err("permission denied")
     result = []
@@ -488,14 +551,12 @@ def tool_write_file(a):
     try:
         t.parent.mkdir(parents=True, exist_ok=True)
         t.write_text(content, encoding="utf-8")
-        return _ok(f"wrote {t.stat().st_size} bytes to {t}",
-                    path=str(t), size=t.stat().st_size)
+        return _ok(f"wrote {t.stat().st_size} bytes to {t}", path=str(t), size=t.stat().st_size)
     except PermissionError: return _err(f"permission denied: {t}")
     except Exception as e: return _err(f"{type(e).__name__}: {e}")
 
 def tool_edit_file(a):
-    rel = a.get("path", "").strip()
-    old = a.get("old_string", ""); new = a.get("new_string", "")
+    rel = a.get("path", "").strip(); old = a.get("old_string", ""); new = a.get("new_string", "")
     if not rel: return _err("path required")
     if not old: return _err("old_string required")
     try: t = _safe_resolve(rel)
@@ -531,14 +592,13 @@ def tool_delete_file(a):
     if not t.exists(): return _err(f"not found: {t}")
     if t.is_dir(): return _err(f"is a directory: {t}")
     try:
-        t.unlink()
-        return _ok(f"deleted {t}", path=str(t))
+        t.unlink(); return _ok(f"deleted {t}", path=str(t))
     except PermissionError: return _err("permission denied")
 
 def tool_run_shell(a):
     cmd = a.get("command", "").strip()
     if not cmd: return _err("command required")
-    if _is_destructive(cmd): return _err("refused: destructive command")
+    if _is_destructive(cmd): return _err("refused: destructive")
     try: timeout = max(1, min(int(a.get("timeout", 30)), 300))
     except (ValueError, TypeError): timeout = 30
     try:
@@ -589,11 +649,11 @@ PYEOF
 }
 
 # ============================================================================
-#  WRITE: runner/tui.py
+#  WRITE: runner/tui.py (23 providers)
 # ============================================================================
 write_tui() {
   cat > "$RUNNER_DIR/tui.py" <<'PYEOF'
-"""AyhanX-Agent — terminal chat."""
+"""AyhanX-Agent — terminal chat with 23 providers."""
 import html, json, os, sys
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -615,22 +675,38 @@ from rich.table import Table
 from rich.text import Text
 from .tools import TOOL_IMPLS, TOOL_SPECS
 
-VERSION = os.environ.get("AI_RUNNER_VERSION", "4.0.1")
+VERSION = os.environ.get("AI_RUNNER_VERSION", "5.0.0")
 APP_DIR = Path(os.environ.get("APP_DIR", Path.home() / ".ai_platform"))
 CONFIG_PATH = APP_DIR / "config.json"
 HISTORY_PATH = APP_DIR / "history.txt"
 CHATS_DIR = APP_DIR / "chats"
 PROVIDERS_FILE = APP_DIR / "providers.json"
+DESIGN_FILE = APP_DIR / "DESIGN.md"
 CHATS_DIR.mkdir(parents=True, exist_ok=True)
 
 PROVIDER = os.environ.get("AYHANX_PROVIDER", "deepseek")
-LOCAL_PROVIDERS = {"ollama", "lmstudio", "vllm", "llamacpp", "localai"}
+LOCAL_PROVIDERS = {"ollama", "lmstudio", "vllm", "llamacpp", "localai", "ollama-cloud"}
 
 PROVIDER_DEFAULTS = {
     "deepseek":   {"url": "https://api.deepseek.com", "model": "deepseek-chat"},
     "openrouter": {"url": "https://openrouter.ai/api/v1", "model": "deepseek/deepseek-chat"},
     "groq":       {"url": "https://api.groq.com/openai/v1", "model": "llama-3.3-70b-versatile"},
     "google":     {"url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.5-flash"},
+    "mistral":    {"url": "https://api.mistral.ai/v1", "model": "mistral-large-latest"},
+    "together":   {"url": "https://api.together.ai/v1", "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo"},
+    "fireworks":  {"url": "https://api.fireworks.ai/inference/v1", "model": "accounts/fireworks/models/llama-v3p1-8b-instruct"},
+    "deepinfra":  {"url": "https://api.deepinfra.com/v1/openai", "model": "meta-llama/Meta-Llama-3.1-70B-Instruct"},
+    "perplexity": {"url": "https://api.perplexity.ai/v1", "model": "sonar-pro"},
+    "xai":        {"url": "https://api.x.ai/v1", "model": "grok-2-latest"},
+    "cerebras":   {"url": "https://api.cerebras.ai/v1", "model": "llama3.1-8b"},
+    "abacus":     {"url": "https://routellm.abacus.ai/v1", "model": "gpt-4o"},
+    "novita":     {"url": "https://api.novita.ai/openai/v1", "model": "meta-llama/llama-3.1-8b-instruct"},
+    "siliconcloud": {"url": "https://api.siliconflow.cn/v1", "model": "Qwen/Qwen2.5-7B-Instruct"},
+    "bytedance":  {"url": "https://ark.cn-beijing.volces.com/api/v3", "model": "doubao-pro-4k"},
+    "aliyun":     {"url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
+    "minimax":    {"url": "https://api.minimax.io/v1", "model": "abab6.5s-chat"},
+    "edenai":     {"url": "https://api.edenai.run/v3", "model": "openai/gpt-4o"},
+    "ollama-cloud": {"url": "https://ollama.com/v1", "model": "llama3.2"},
     "ollama":     {"url": "http://localhost:11434/v1", "model": "qwen2.5:3b"},
     "lmstudio":   {"url": "http://localhost:1234/v1", "model": "local-model"},
     "vllm":       {"url": "http://localhost:8000/v1", "model": "local-model"},
@@ -645,12 +721,41 @@ PROVIDER_MODELS = {
                    "qwen/qwen-2.5-72b-instruct:free", "microsoft/phi-4:free"],
     "groq": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"],
     "google": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest", "gemini-flash-lite-latest"],
+    "mistral": ["mistral-large-latest", "mistral-small-latest", "codestral-latest", "open-mistral-nemo"],
+    "together": ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+                 "Qwen/Qwen2.5-72B-Instruct-Turbo", "deepseek-ai/DeepSeek-R1"],
+    "fireworks": ["accounts/fireworks/models/llama-v3p1-8b-instruct",
+                  "accounts/fireworks/models/llama-v3p1-70b-instruct",
+                  "accounts/fireworks/models/qwen2p5-72b-instruct"],
+    "deepinfra": ["meta-llama/Meta-Llama-3.1-70B-Instruct", "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                  "Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3"],
+    "perplexity": ["sonar-pro", "sonar", "sonar-reasoning", "sonar-reasoning-pro"],
+    "xai": ["grok-2-latest", "grok-2-vision-latest", "grok-beta"],
+    "cerebras": ["llama3.1-8b", "llama3.1-70b", "llama-3.3-70b"],
+    "abacus": ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet", "llama-3.1-405b"],
+    "novita": ["meta-llama/llama-3.1-8b-instruct", "meta-llama/llama-3.1-70b-instruct",
+               "qwen/qwen-2.5-72b-instruct"],
+    "siliconcloud": ["Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-72B-Instruct",
+                     "deepseek-ai/DeepSeek-V3", "meta-llama/Meta-Llama-3.1-8B-Instruct"],
+    "bytedance": ["doubao-pro-4k", "doubao-pro-32k", "doubao-lite-4k"],
+    "aliyun": ["qwen-plus", "qwen-turbo", "qwen-max", "qwen-long"],
+    "minimax": ["abab6.5s-chat", "abab6.5-chat", "abab5.5-chat"],
+    "edenai": ["openai/gpt-4o", "anthropic/claude-3-5-sonnet", "google/gemini-2.5-flash"],
+    "ollama-cloud": ["llama3.2", "llama3.1", "qwen2.5", "deepseek-r1"],
     "ollama": [], "lmstudio": [], "vllm": [], "llamacpp": [], "localai": [],
 }
 
-LABELS = {"deepseek": "DeepSeek", "openrouter": "OpenRouter", "groq": "Groq",
-          "google": "Google AI Studio", "ollama": "Ollama", "lmstudio": "LM Studio",
-          "vllm": "vLLM", "llamacpp": "llama.cpp", "localai": "LocalAI"}
+LABELS = {
+    "deepseek": "DeepSeek", "openrouter": "OpenRouter", "groq": "Groq",
+    "google": "Google AI Studio", "mistral": "Mistral", "together": "Together AI",
+    "fireworks": "Fireworks AI", "deepinfra": "DeepInfra", "perplexity": "Perplexity",
+    "xai": "xAI (Grok)", "cerebras": "Cerebras", "abacus": "Abacus AI",
+    "novita": "Novita AI", "siliconcloud": "SiliconCloud", "bytedance": "ByteDance Ark",
+    "aliyun": "Aliyun DashScope", "minimax": "MiniMax", "edenai": "EdenAI",
+    "ollama-cloud": "Ollama Cloud",
+    "ollama": "Ollama", "lmstudio": "LM Studio", "vllm": "vLLM",
+    "llamacpp": "llama.cpp", "localai": "LocalAI",
+}
 
 def provider_label(name=None): return LABELS.get(name or PROVIDER, (name or PROVIDER))
 def is_local(name=None): return (name or PROVIDER) in LOCAL_PROVIDERS
@@ -780,6 +885,11 @@ class DeepSeekClient:
         if not b: return ""
         if self.provider == "openrouter": return b + " — openrouter.ai/keys"
         if self.provider == "google": return b + " — aistudio.google.com/apikey"
+        if self.provider == "mistral": return b + " — console.mistral.ai"
+        if self.provider == "together": return b + " — api.together.ai"
+        if self.provider == "xai": return b + " — console.x.ai"
+        if self.provider == "perplexity": return b + " — perplexity.ai/settings/api"
+        if self.provider == "cerebras": return b + " — cloud.cerebras.ai"
         if self.provider in LOCAL_PROVIDERS: return b + " — is the server running?"
         return b + " — platform.deepseek.com/api_keys"
     def _error(self, s, body):
@@ -870,8 +980,8 @@ def help_panel():
     for c, d in rows: t.add_row(c, d)
     keys = Text.assemble(("Enter", f"bold {TEXT}"),(" send   ", MUTED),
                          ("Esc+Enter", f"bold {TEXT}"),(" newline   ", MUTED),
-                         ("↑ ↓", f"bold {TEXT}"),(" history   ", MUTED),
-                         ("Ctrl+C", f"bold {TEXT}"),(" cancel", MUTED))
+                         ("↑ ↓", f"bold {TEXT}"), (" history   ", MUTED),
+                         ("Ctrl+C", f"bold {TEXT}"), (" cancel", MUTED))
     console.print(Panel(Group(t, Text(""), keys), title=Text("commands", style=f"bold {VIOLET}"),
                         title_align="left", box=box.ROUNDED, border_style=VIOLET_DEEP, padding=(1, 2)))
 
@@ -884,6 +994,7 @@ def info_panel(cfg, conv):
     t.add_row("system prompt", "set" if cfg.system_prompt else "none")
     t.add_row("messages", str(len(conv.messages)))
     t.add_row("config", str(CONFIG_PATH)); t.add_row("providers", str(PROVIDERS_FILE)); t.add_row("chats", str(CHATS_DIR))
+    if DESIGN_FILE.exists(): t.add_row("design", str(DESIGN_FILE))
     console.print(Panel(t, title=Text("info", style=f"bold {VIOLET}"), title_align="left",
                         box=box.ROUNDED, border_style=VIOLET_DEEP, padding=(1, 2)))
 
@@ -937,7 +1048,16 @@ AGENT_SYSTEM = (
     "3. After creating a file, verify it works (run it if applicable).\n"
     "4. Be concise in your final answer — show what you did.\n"
     "5. Paths are relative to $HOME. Use relative paths.\n"
-    "6. NEVER use destructive commands (rm -rf /, mkfs, dd, etc.)"
+    "6. NEVER use destructive commands (rm -rf /, mkfs, dd, etc.)\n\n"
+    "DESIGN PRINCIPLES (when writing UI code):\n"
+    "- Use springs, not CSS transitions, for gesture-driven animation\n"
+    "- Animations must be interruptible: start from current on-screen value\n"
+    "- Hand off finger velocity to springs on drag release\n"
+    "- Animate only transform/opacity, never width/height\n"
+    "- Use backdrop-filter for translucent materials\n"
+    "- Always include @media (prefers-reduced-motion: reduce) fallbacks\n"
+    "- Feedback on pointer-down, not release\n"
+    "- Rubber-band at edges, never hard-stop\n"
 )
 
 def build_msgs(conv, cfg, agent=False):
@@ -1129,12 +1249,12 @@ PYEOF
 }
 
 # ============================================================================
-#  WRITE: runner/server.py  (web UI)
+#  WRITE: runner/server.py (web UI with 23 providers + auto-port)
 # ============================================================================
 write_server() {
   cat > "$RUNNER_DIR/server.py" <<'PYEOF'
-"""AyhanX-Agent — premium web UI."""
-import json, os
+"""AyhanX-Agent — web UI with 23 providers + auto-port."""
+import json, os, socket
 from datetime import datetime
 from pathlib import Path
 import httpx
@@ -1147,7 +1267,7 @@ try:
 except ImportError:
     from tools import TOOL_IMPLS, TOOL_SPECS
 
-VERSION = os.environ.get("AI_RUNNER_VERSION", "4.0.1")
+VERSION = os.environ.get("AI_RUNNER_VERSION", "5.0.0")
 APP_DIR = Path(os.environ.get("APP_DIR", Path.home() / ".ai_platform"))
 CONFIG_PATH = APP_DIR / "config.json"
 PROVIDERS_FILE = APP_DIR / "providers.json"
@@ -1155,10 +1275,18 @@ PROVIDER_FILE = APP_DIR / "provider"
 CHATS_DIR = APP_DIR / "chats"
 CHATS_DIR.mkdir(parents=True, exist_ok=True)
 
-LOCAL_PROVIDERS = {"ollama", "lmstudio", "vllm", "llamacpp", "localai"}
-LABELS = {"deepseek": "DeepSeek", "openrouter": "OpenRouter", "groq": "Groq",
-          "google": "Google AI Studio", "ollama": "Ollama", "lmstudio": "LM Studio",
-          "vllm": "vLLM", "llamacpp": "llama.cpp", "localai": "LocalAI"}
+LOCAL_PROVIDERS = {"ollama", "lmstudio", "vllm", "llamacpp", "localai", "ollama-cloud"}
+LABELS = {
+    "deepseek": "DeepSeek", "openrouter": "OpenRouter", "groq": "Groq",
+    "google": "Google AI Studio", "mistral": "Mistral", "together": "Together AI",
+    "fireworks": "Fireworks AI", "deepinfra": "DeepInfra", "perplexity": "Perplexity",
+    "xai": "xAI (Grok)", "cerebras": "Cerebras", "abacus": "Abacus AI",
+    "novita": "Novita AI", "siliconcloud": "SiliconCloud", "bytedance": "ByteDance Ark",
+    "aliyun": "Aliyun DashScope", "minimax": "MiniMax", "edenai": "EdenAI",
+    "ollama-cloud": "Ollama Cloud",
+    "ollama": "Ollama", "lmstudio": "LM Studio", "vllm": "vLLM",
+    "llamacpp": "llama.cpp", "localai": "LocalAI",
+}
 PROVIDER_MODELS = {
     "deepseek": ["deepseek-chat", "deepseek-reasoner"],
     "openrouter": ["deepseek/deepseek-chat", "deepseek/deepseek-chat-v3-0324:free",
@@ -1166,6 +1294,27 @@ PROVIDER_MODELS = {
                    "qwen/qwen-2.5-72b-instruct:free", "microsoft/phi-4:free"],
     "groq": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"],
     "google": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest", "gemini-flash-lite-latest"],
+    "mistral": ["mistral-large-latest", "mistral-small-latest", "codestral-latest", "open-mistral-nemo"],
+    "together": ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+                 "Qwen/Qwen2.5-72B-Instruct-Turbo", "deepseek-ai/DeepSeek-R1"],
+    "fireworks": ["accounts/fireworks/models/llama-v3p1-8b-instruct",
+                  "accounts/fireworks/models/llama-v3p1-70b-instruct",
+                  "accounts/fireworks/models/qwen2p5-72b-instruct"],
+    "deepinfra": ["meta-llama/Meta-Llama-3.1-70B-Instruct", "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                  "Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3"],
+    "perplexity": ["sonar-pro", "sonar", "sonar-reasoning", "sonar-reasoning-pro"],
+    "xai": ["grok-2-latest", "grok-2-vision-latest", "grok-beta"],
+    "cerebras": ["llama3.1-8b", "llama3.1-70b", "llama-3.3-70b"],
+    "abacus": ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet", "llama-3.1-405b"],
+    "novita": ["meta-llama/llama-3.1-8b-instruct", "meta-llama/llama-3.1-70b-instruct",
+               "qwen/qwen-2.5-72b-instruct"],
+    "siliconcloud": ["Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-72B-Instruct",
+                     "deepseek-ai/DeepSeek-V3", "meta-llama/Meta-Llama-3.1-8B-Instruct"],
+    "bytedance": ["doubao-pro-4k", "doubao-pro-32k", "doubao-lite-4k"],
+    "aliyun": ["qwen-plus", "qwen-turbo", "qwen-max", "qwen-long"],
+    "minimax": ["abab6.5s-chat", "abab6.5-chat", "abab5.5-chat"],
+    "edenai": ["openai/gpt-4o", "anthropic/claude-3-5-sonnet", "google/gemini-2.5-flash"],
+    "ollama-cloud": ["llama3.2", "llama3.1", "qwen2.5", "deepseek-r1"],
     "ollama": [], "lmstudio": [], "vllm": [], "llamacpp": [], "localai": [],
 }
 
@@ -1181,7 +1330,16 @@ AGENT_SYSTEM = (
     "3. After creating a file, verify it works (run it if applicable).\n"
     "4. Be concise in your final answer — show what you did.\n"
     "5. Paths are relative to $HOME. Use relative paths.\n"
-    "6. NEVER use destructive commands (rm -rf /, mkfs, dd, etc.)"
+    "6. NEVER use destructive commands (rm -rf /, mkfs, dd, etc.)\n\n"
+    "DESIGN PRINCIPLES (when writing UI code):\n"
+    "- Use springs, not CSS transitions, for gesture-driven animation\n"
+    "- Animations must be interruptible: start from current on-screen value\n"
+    "- Hand off finger velocity to springs on drag release\n"
+    "- Animate only transform/opacity, never width/height\n"
+    "- Use backdrop-filter for translucent materials\n"
+    "- Always include @media (prefers-reduced-motion: reduce) fallbacks\n"
+    "- Feedback on pointer-down, not release\n"
+    "- Rubber-band at edges, never hard-stop\n"
 )
 
 def _load_providers():
@@ -1224,6 +1382,17 @@ def _err_msg(status, body):
     try: msg = json.loads(body).get("error", {}).get("message", body)
     except Exception: pass
     return f"HTTP {status}: {msg}"
+
+def find_free_port(start=8080, end=8200):
+    for p in range(start, end):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.bind(('0.0.0.0', p)); return p
+        except OSError:
+            continue
+        finally:
+            s.close()
+    return None
 
 class ChatReq(BaseModel):
     conversation_id: str | None = None
@@ -1317,21 +1486,17 @@ def get_conv(cid: str):
 async def chat(req: ChatReq):
     text = req.message.strip()
     if not text: raise HTTPException(400, "empty message")
-
     name, p = _client_info()
     cfg = _load_cfg()
     key = p["key"]; base = p["url"].rstrip("/")
     model = cfg.get("model", p["model"])
     system_prompt = cfg.get("system_prompt", "")
-
     cid = req.conversation_id or datetime.now().strftime("chat-%Y%m%d-%H%M%S")
     conv_path = CHATS_DIR / f"{cid}.json"
     if conv_path.exists():
         try: messages = json.loads(conv_path.read_text())
         except Exception: messages = []
-    else:
-        messages = []
-
+    else: messages = []
     messages.append({"role": "user", "content": text})
     conv_path.write_text(json.dumps(messages, indent=2))
 
@@ -1395,7 +1560,6 @@ async def _run_agent(messages, name, key, base, model, system_prompt, cid, conv_
         obj = r.json()
         msg = obj.get("choices", [{}])[0].get("message", {})
         tcalls = msg.get("tool_calls") or []
-        print(f"[agent] tool_calls: {len(tcalls)}", flush=True)
         if not tcalls:
             content = msg.get("content") or ""
             if content:
@@ -1411,14 +1575,12 @@ async def _run_agent(messages, name, key, base, model, system_prompt, cid, conv_
             fn = tc.get("function", {}); tname = fn.get("name", "?")
             try: args = json.loads(fn.get("arguments") or "{}")
             except json.JSONDecodeError: args = {}
-            print(f"[agent] {tname}({json.dumps(args)[:80]})", flush=True)
             yield f"data: {json.dumps({'type':'tool','name':tname,'args':args})}\n\n"
             impl = TOOL_IMPLS.get(tname)
             if impl:
                 try: result = impl(args)
                 except Exception as e: result = f"{type(e).__name__}: {e}"
             else: result = f"unknown tool: {tname}"
-            print(f"[agent] → {str(result)[:100]}", flush=True)
             yield f"data: {json.dumps({'type':'tool_result','text':result[:800]})}\n\n"
             msgs.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
     yield f"data: {json.dumps({'type':'delta','text':'\n\n[agent stopped after 12 iterations]'})}\n\n"
@@ -1429,53 +1591,80 @@ HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AyhanX-Agent</title>
 <style>
-:root{--bg:#080b12;--panel:#10141e;--panel-2:#161b27;--border:#232a3d;--border-2:#2f3849;
---text:#e8eef7;--dim:#8b95a8;--mute:#5c6577;--accent:#5eead4;--accent-2:#2dd4bf;
---glow:rgba(94,234,212,.15);--red:#f87171;--amber:#fbbf24;--green:#34d399;--violet:#a78bfa;--blue:#60a5fa}
+:root{
+  --bg:#080b12;--bg-2:#0b0f17;--panel:#10141e;--panel-2:#161b27;--panel-3:#1e2534;
+  --border:#232a3d;--border-2:#2f3849;
+  --text:#e8eef7;--dim:#8b95a8;--mute:#5c6577;
+  --accent:#5eead4;--accent-2:#2dd4bf;--glow:rgba(94,234,212,.15);
+  --red:#f87171;--amber:#fbbf24;--green:#34d399;--violet:#a78bfa;--blue:#60a5fa;
+}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:var(--bg);color:var(--text);
-font:15px/1.6 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+font:15px/1.6 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;
+-webkit-font-smoothing:antialiased;font-optical-sizing:auto}
 body::before{content:'';position:fixed;inset:-50%;z-index:0;pointer-events:none;
 background:radial-gradient(circle at 20% 10%,rgba(94,234,212,.10),transparent 40%),
 radial-gradient(circle at 80% 90%,rgba(167,139,250,.08),transparent 40%);
 animation:drift 24s ease-in-out infinite alternate}
 @keyframes drift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(3%,-2%) scale(1.05)}}
-#app{position:relative;z-index:1;display:flex;height:100vh}
-.sidebar{width:270px;background:rgba(16,20,30,.6);backdrop-filter:blur(20px);
-border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;transition:transform .3s cubic-bezier(.4,0,.2,1)}
+#app{position:relative;z-index:1;display:flex;height:100vh;overflow:hidden}
+
+.sidebar{width:270px;background:rgba(16,20,30,.55);backdrop-filter:blur(24px) saturate(180%);
+-webkit-backdrop-filter:blur(24px) saturate(180%);
+border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;
+transition:width 320ms cubic-bezier(.34,1.56,.64,1),border-right 320ms;will-change:width}
+.sidebar.collapsed{width:0;overflow:hidden;border-right:none}
+.sidebar.collapsed .sidebar-head,
+.sidebar.collapsed .convs,
+.sidebar.collapsed .sidebar-foot{opacity:0;pointer-events:none}
+.sidebar-head,.convs,.sidebar-foot{transition:opacity 180ms}
+
+@media (prefers-reduced-transparency: reduce){
+  .sidebar,.header,.composer-inner{background:var(--panel);backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:0.01ms !important;transition-duration:200ms !important}
+  .sidebar{transition:width 200ms ease}
+  .sidebar.collapsed{width:0}
+  body::before{animation:none}
+}
+
 .sidebar-head{padding:18px 18px 14px}
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
 .brand-icon{width:28px;height:28px;border-radius:8px;
 background:linear-gradient(135deg,var(--accent),var(--accent-2));
 display:flex;align-items:center;justify-content:center;
 color:#0a0e14;font-weight:700;font-size:16px;box-shadow:0 0 16px var(--glow)}
-.brand-name{font-weight:600;font-size:14px}
+.brand-name{font-weight:600;font-size:14px;letter-spacing:-0.01em}
 .brand-ver{font-size:11px;color:var(--mute)}
 .new-btn{width:100%;padding:10px 14px;border-radius:10px;
 background:linear-gradient(135deg,rgba(94,234,212,.15),rgba(45,212,191,.08));
 border:1px solid rgba(94,234,212,.3);color:var(--accent);
 font-weight:600;font-size:13px;cursor:pointer;
 display:flex;align-items:center;justify-content:center;gap:8px;
-transition:all .2s;font-family:inherit}
-.new-btn:hover{background:linear-gradient(135deg,rgba(94,234,212,.25),rgba(45,212,191,.15));
-box-shadow:0 0 20px var(--glow);transform:translateY(-1px)}
+transition:transform 100ms,background 200ms,box-shadow 200ms;font-family:inherit}
+.new-btn:hover{background:linear-gradient(135deg,rgba(94,234,212,.25),rgba(45,212,191,.15));box-shadow:0 0 20px var(--glow)}
+.new-btn:active{transform:scale(0.97)}
+
 .convs{flex:1;overflow-y:auto;padding:8px 10px}
 .conv-item{padding:10px 12px;border-radius:10px;cursor:pointer;
 display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim);
-transition:all .15s;margin-bottom:2px}
+transition:background 150ms,color 150ms;margin-bottom:2px}
 .conv-item:hover{background:rgba(255,255,255,.04);color:var(--text)}
 .conv-item.active{background:rgba(94,234,212,.1);color:var(--accent);border:1px solid rgba(94,234,212,.2)}
 .conv-item .title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.conv-item .del{opacity:0;color:var(--red);font-size:16px;padding:0 2px;background:none;border:none;cursor:pointer}
+.conv-item .del{opacity:0;color:var(--red);font-size:16px;padding:0 2px;background:none;border:none;cursor:pointer;transition:opacity 150ms}
 .conv-item:hover .del{opacity:.7}
 .empty-state{padding:40px 20px;text-align:center;color:var(--mute);font-size:12px}
 .empty-state .icon{font-size:32px;margin-bottom:8px;opacity:.5}
+
 .sidebar-foot{padding:12px 14px;border-top:1px solid var(--border)}
 .provider-btn{width:100%;padding:10px 12px;border-radius:10px;
 background:rgba(255,255,255,.03);border:1px solid var(--border);
 color:var(--text);font-size:12.5px;cursor:pointer;
-display:flex;align-items:center;gap:8px;transition:all .15s;font-family:inherit}
+display:flex;align-items:center;gap:8px;transition:transform 100ms,background 150ms;font-family:inherit}
 .provider-btn:hover{background:rgba(255,255,255,.06);border-color:var(--border-2)}
+.provider-btn:active{transform:scale(0.98)}
 .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--green);box-shadow:0 0 8px currentColor}
 .dot.deepseek{background:var(--blue);box-shadow:0 0 8px var(--blue)}
 .dot.openrouter{background:var(--violet);box-shadow:0 0 8px var(--violet)}
@@ -1483,59 +1672,83 @@ display:flex;align-items:center;gap:8px;transition:all .15s;font-family:inherit}
 .dot.google{background:var(--red);box-shadow:0 0 8px var(--red)}
 .dot.local{background:var(--green);box-shadow:0 0 8px var(--green)}
 .provider-name{flex:1;text-align:left;font-weight:500}
+
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
 .header{padding:14px 24px;border-bottom:1px solid var(--border);
-display:flex;align-items:center;gap:12px;background:rgba(11,15,23,.6);backdrop-filter:blur(20px)}
+display:flex;align-items:center;gap:12px;
+background:rgba(11,15,23,.55);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%)}
 .menu-btn{display:none;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:6px}
+.collapse-btn{background:none;border:1px solid var(--border);color:var(--dim);
+width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:12px;
+display:flex;align-items:center;justify-content:center;
+transition:transform 280ms cubic-bezier(.34,1.56,.64,1),background 150ms,color 150ms,border-color 150ms;
+font-family:inherit;flex-shrink:0}
+.collapse-btn:hover{background:var(--panel);color:var(--accent);border-color:var(--border-2)}
+.collapse-btn:active{transform:scale(0.94) rotate(180deg)}
+body.collapsed .collapse-btn{transform:rotate(180deg)}
+body.collapsed .collapse-btn:active{transform:scale(0.94)}
+
 .model-sel{padding:6px 12px;border-radius:8px;background:var(--panel);border:1px solid var(--border);
-color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .15s;font-family:inherit}
+color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;
+transition:transform 100ms,background 150ms,border-color 150ms;font-family:inherit}
 .model-sel:hover{background:var(--panel-2);border-color:var(--border-2)}
+.model-sel:active{transform:scale(0.97)}
 .model-sel .chev{font-size:10px;color:var(--mute)}
 .spacer{flex:1}
+
 .mode-toggle{padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;
 background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.3);
-color:var(--green);cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .2s;font-family:inherit}
+color:var(--green);cursor:pointer;display:flex;align-items:center;gap:6px;
+transition:transform 100ms,background 150ms,border-color 150ms;font-family:inherit}
 .mode-toggle:hover{filter:brightness(1.15)}
+.mode-toggle:active{transform:scale(0.96)}
 .mode-toggle.agent{background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.3);color:var(--amber)}
 .mode-dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
+
 .icon-btn{background:none;border:1px solid var(--border);color:var(--dim);
 width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:16px;
-display:flex;align-items:center;justify-content:center;transition:all .15s}
+display:flex;align-items:center;justify-content:center;
+transition:transform 100ms,background 150ms,color 150ms,border-color 150ms}
 .icon-btn:hover{background:var(--panel);color:var(--text);border-color:var(--border-2)}
+.icon-btn:active{transform:scale(0.94)}
+
 .chat{flex:1;overflow-y:auto;padding:8px 0 140px;scroll-behavior:smooth}
 .chat::-webkit-scrollbar{width:8px}
 .chat::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:4px}
-.welcome{max-width:820px;margin:100px auto 0;padding:0 32px;text-align:center;animation:fadeUp .6s ease-out}
-@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+.welcome{max-width:820px;margin:100px auto 0;padding:0 32px;text-align:center;animation:fadeUp 480ms cubic-bezier(.34,1.56,.64,1)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .welcome-icon{width:64px;height:64px;border-radius:18px;margin:0 auto 24px;
 background:linear-gradient(135deg,var(--accent),var(--accent-2));
 display:flex;align-items:center;justify-content:center;font-size:28px;
 color:#0a0e14;font-weight:700;box-shadow:0 0 40px var(--glow),0 8px 32px rgba(0,0,0,.3)}
-.welcome h1{font-size:36px;font-weight:700;margin-bottom:8px;letter-spacing:-.5px;
+.welcome h1{font-size:36px;font-weight:700;margin-bottom:8px;letter-spacing:-0.02em;
 background:linear-gradient(135deg,var(--text),var(--accent));
 -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .welcome p{color:var(--dim);font-size:15px;margin-bottom:40px}
 .suggestions{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:32px}
 .sug{padding:14px 18px;background:rgba(255,255,255,.02);border:1px solid var(--border);
 border-radius:12px;color:var(--dim);font-size:13.5px;text-align:left;cursor:pointer;
-transition:all .2s;font-family:inherit}
-.sug:hover{background:rgba(94,234,212,.06);border-color:rgba(94,234,212,.3);color:var(--text);transform:translateY(-1px)}
-.message{max-width:820px;margin:0 auto;padding:14px 32px;display:flex;gap:16px;animation:fadeUp .3s ease-out}
+transition:transform 120ms,background 150ms,border-color 150ms;font-family:inherit}
+.sug:hover{background:rgba(94,234,212,.06);border-color:rgba(94,234,212,.3);color:var(--text)}
+.sug:active{transform:scale(0.98)}
+
+.message{max-width:820px;margin:0 auto;padding:14px 32px;display:flex;gap:16px;animation:msgIn 320ms cubic-bezier(.34,1.56,.64,1)}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .message+.message{padding-top:4px}
 .msg-body{flex:1;min-width:0;line-height:1.7;word-wrap:break-word}
-.msg-role{font-size:11px;font-weight:600;color:var(--mute);margin-bottom:4px;letter-spacing:.5px;text-transform:uppercase}
+.msg-role{font-size:11px;font-weight:600;color:var(--mute);margin-bottom:4px;letter-spacing:0.02em;text-transform:uppercase}
 .msg-user{justify-content:flex-end}
 .msg-user .msg-body{flex:0 1 auto;max-width:75%;
 background:linear-gradient(135deg,rgba(94,234,212,.08),rgba(45,212,191,.04));
-border:1px solid rgba(94,234,212,.2);border-radius:16px;padding:10px 16px;
-color:var(--text);white-space:pre-wrap}
+border:1px solid rgba(94,234,212,.2);border-radius:16px;padding:10px 16px;color:var(--text);white-space:pre-wrap}
 .msg-user .msg-role{display:none}
 .msg-ai .msg-role{color:var(--accent)}
 .msg-ai .msg-body p{margin-bottom:12px}
 .msg-ai .msg-body p:last-child{margin-bottom:0}
-.msg-ai .msg-body code{background:var(--panel-2);padding:2px 6px;border-radius:5px;
+.msg-ai .msg-body code{background:var(--panel-3);padding:2px 6px;border-radius:5px;
 font:13px/1.4 "SF Mono","JetBrains Mono",Menlo,monospace;color:var(--accent)}
-.msg-ai .msg-body pre{background:#060810;border:1px solid var(--border);
+.msg-ai .msg-body pre{background:var(--bg-2);border:1px solid var(--border);
 padding:14px 16px;border-radius:10px;overflow-x:auto;margin:12px 0;
 font:13px/1.5 "SF Mono","JetBrains Mono",Menlo,monospace}
 .msg-ai .msg-body pre code{background:none;padding:0;color:var(--text)}
@@ -1549,26 +1762,35 @@ font:13px/1.5 "SF Mono","JetBrains Mono",Menlo,monospace}
 .msg-ai .msg-body a:hover{border-bottom-color:var(--accent)}
 .msg-ai .msg-body strong{color:var(--text);font-weight:600}
 .msg-ai .msg-body blockquote{border-left:3px solid var(--border-2);padding-left:14px;color:var(--dim);margin:12px 0}
+
 .tool-cards{margin:8px 0 0 32px}
 .tool-card{background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);
 border-radius:8px;padding:10px 14px;margin:6px 0;font-size:12px;
-font-family:"SF Mono","JetBrains Mono",Menlo,monospace}
+font-family:"SF Mono","JetBrains Mono",Menlo,monospace;animation:toolIn 280ms cubic-bezier(.34,1.56,.64,1)}
+@keyframes toolIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .tool-card .tool-name{color:var(--amber);font-weight:600}
 .tool-card .tool-args{color:var(--mute);margin-left:8px}
 .tool-card .tool-result{color:var(--text);margin-top:6px;padding-top:6px;
 border-top:1px solid rgba(251,191,36,.15);white-space:pre-wrap;
 max-height:120px;overflow-y:auto;font-size:11.5px;line-height:1.5}
+
 .msg-err{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);
 border-radius:10px;padding:12px 16px;color:var(--red);font-size:13px}
+
 .cursor{display:inline-block;width:7px;height:16px;background:var(--accent);
 vertical-align:middle;margin-left:2px;animation:blink 1s steps(2) infinite;border-radius:2px}
 @keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
+
 .composer-wrap{position:fixed;bottom:0;left:270px;right:0;
-padding:20px 24px 22px;background:linear-gradient(transparent,var(--bg) 30%);z-index:10}
+padding:20px 24px 22px;background:linear-gradient(transparent,var(--bg) 30%);
+z-index:10;transition:left 320ms cubic-bezier(.34,1.56,.64,1)}
+body.collapsed .composer-wrap{left:0}
 .composer{max-width:820px;margin:0 auto}
-.composer-inner{background:rgba(16,20,30,.85);backdrop-filter:blur(20px);
+.composer-inner{background:rgba(16,20,30,.85);backdrop-filter:blur(24px) saturate(180%);
+-webkit-backdrop-filter:blur(24px) saturate(180%);
 border:1px solid var(--border);border-radius:18px;padding:8px 8px 8px 18px;
-display:flex;align-items:flex-end;gap:8px;transition:all .2s;box-shadow:0 4px 24px rgba(0,0,0,.3)}
+display:flex;align-items:flex-end;gap:8px;
+transition:border-color 200ms,box-shadow 280ms;box-shadow:0 4px 24px rgba(0,0,0,.3)}
 .composer-inner:focus-within{border-color:rgba(94,234,212,.4);box-shadow:0 0 0 3px var(--glow),0 4px 24px rgba(0,0,0,.4)}
 #input{flex:1;background:none;border:none;outline:none;color:var(--text);
 font:inherit;resize:none;max-height:200px;padding:8px 0;line-height:1.6}
@@ -1576,47 +1798,60 @@ font:inherit;resize:none;max-height:200px;padding:8px 0;line-height:1.6}
 .send-btn{width:38px;height:38px;border-radius:12px;border:none;cursor:pointer;
 background:linear-gradient(135deg,var(--accent),var(--accent-2));
 color:#0a0e14;font-size:18px;font-weight:700;
-display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0;font-family:inherit}
+display:flex;align-items:center;justify-content:center;
+transition:transform 120ms cubic-bezier(.34,1.56,.64,1),box-shadow 200ms;flex-shrink:0;font-family:inherit}
 .send-btn:hover:not(:disabled){transform:scale(1.05);box-shadow:0 0 20px var(--glow)}
-.send-btn:disabled{background:var(--panel-2);color:var(--mute);cursor:not-allowed}
+.send-btn:active:not(:disabled){transform:scale(0.95)}
+.send-btn:disabled{background:var(--panel-3);color:var(--mute);cursor:not-allowed}
 .composer-hint{max-width:820px;margin:8px auto 0;padding:0 4px;
 display:flex;justify-content:space-between;font-size:11px;color:var(--mute)}
 #status{color:var(--accent)}
+
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);
-z-index:100;display:none;align-items:center;justify-content:center;padding:20px;animation:fadeIn .15s}
+z-index:100;display:none;align-items:center;justify-content:center;padding:20px;
+animation:fadeIn 180ms cubic-bezier(.34,1.56,.64,1)}
 .modal.open{display:flex}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .modal-content{background:var(--panel);border:1px solid var(--border-2);
 border-radius:16px;max-width:480px;width:100%;max-height:80vh;
-display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.5);
+animation:modalIn 280ms cubic-bezier(.34,1.56,.64,1);transform-origin:center}
+@keyframes modalIn{from{opacity:0;transform:scale(0.92) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
 .modal-head{padding:18px 22px;border-bottom:1px solid var(--border);
 display:flex;justify-content:space-between;align-items:center}
 .modal-title{font-size:15px;font-weight:600}
-.modal-close{background:none;border:none;color:var(--mute);cursor:pointer;font-size:20px;padding:4px}
+.modal-close{background:none;border:none;color:var(--mute);cursor:pointer;font-size:20px;padding:4px;transition:color 150ms}
 .modal-close:hover{color:var(--text)}
 .modal-body{padding:12px;overflow-y:auto}
 .modal-opt{padding:12px 16px;border-radius:10px;cursor:pointer;
 display:flex;align-items:center;gap:12px;font-size:13.5px;color:var(--text);
-transition:background .15s;border:1px solid transparent}
+transition:background 150ms,border-color 150ms;border:1px solid transparent}
 .modal-opt:hover{background:rgba(255,255,255,.05)}
+.modal-opt:active{transform:scale(0.99)}
 .modal-opt.active{background:rgba(94,234,212,.1);border-color:rgba(94,234,212,.25);color:var(--accent)}
 .modal-opt .opt-main{flex:1;font-weight:500}
 .modal-opt .opt-sub{font-size:11px;color:var(--mute);font-family:"SF Mono","JetBrains Mono",Menlo,monospace}
+.modal-opt.active .opt-sub{color:var(--accent)}
+
 .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);
 background:var(--panel-2);border:1px solid var(--border-2);
 padding:10px 20px;border-radius:10px;font-size:13px;color:var(--text);
-opacity:0;pointer-events:none;transition:all .3s;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+opacity:0;pointer-events:none;transition:opacity 280ms,transform 280ms cubic-bezier(.34,1.56,.64,1);
+z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.err{border-color:rgba(248,113,113,.4);color:var(--red)}
+
 @media(max-width:768px){
-.sidebar{position:fixed;inset:0 auto 0 0;z-index:50;transform:translateX(-100%)}
-.sidebar.open{transform:translateX(0)}
-.menu-btn{display:block}
-.composer-wrap{left:0;padding:16px 12px}
-.suggestions{grid-template-columns:1fr}
-.welcome h1{font-size:28px}
-.welcome{margin-top:60px}
-.msg-user .msg-body{max-width:90%}
+  .sidebar{position:fixed;inset:0 auto 0 0;z-index:50;transform:translateX(-100%);width:270px !important;transition:transform 320ms cubic-bezier(.34,1.56,.64,1)}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar.collapsed{transform:translateX(-100%)}
+  .menu-btn{display:block}
+  .collapse-btn{display:none}
+  .composer-wrap{left:0 !important;padding:16px 12px}
+  .suggestions{grid-template-columns:1fr}
+  .welcome h1{font-size:28px}
+  .welcome{margin-top:60px}
+  .msg-user .msg-body{max-width:90%}
 }
 </style></head><body>
 <div id="app">
@@ -1624,7 +1859,7 @@ opacity:0;pointer-events:none;transition:all .3s;z-index:200;box-shadow:0 8px 24
 <div class="sidebar-head">
 <div class="brand"><div class="brand-icon">◆</div>
 <div><div class="brand-name">AyhanX-Agent</div>
-<div class="brand-ver">v<span id="ver">4.0.1</span></div></div></div>
+<div class="brand-ver">v<span id="ver">5.0.0</span></div></div></div>
 <button class="new-btn" onclick="newConversation()"><span>+</span><span>New chat</span></button>
 </div>
 <div class="convs" id="convs"></div>
@@ -1639,6 +1874,7 @@ opacity:0;pointer-events:none;transition:all .3s;z-index:200;box-shadow:0 8px 24
 <main class="main">
 <header class="header">
 <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+<button class="collapse-btn" id="collapse-btn" onclick="toggleSidebarCollapse()" title="Hide sidebar">◀</button>
 <button class="model-sel" onclick="openModelPicker()">
 <span id="model-name">deepseek-chat</span><span class="chev">▾</span>
 </button>
@@ -1652,7 +1888,7 @@ opacity:0;pointer-events:none;transition:all .3s;z-index:200;box-shadow:0 8px 24
 <div class="welcome" id="welcome">
 <div class="welcome-icon">◆</div>
 <h1>AyhanX-Agent</h1>
-<p>Premium AI chat · full terminal access in Agent mode</p>
+<p>Premium AI chat · 23 providers · full terminal access</p>
 <div class="suggestions">
 <button class="sug" onclick="suggest('Write a Python script that finds duplicate files and run it')">📝 Write & run a duplicate finder</button>
 <button class="sug" onclick="suggest('List my home directory and tell me what is here')">📁 Explore my home directory</button>
@@ -1664,7 +1900,7 @@ opacity:0;pointer-events:none;transition:all .3s;z-index:200;box-shadow:0 8px 24
 onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
 <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>↑</button>
 </div></div>
-<div class="composer-hint"><span>Enter send · Shift+Enter newline</span><span id="status">Ready</span></div>
+<div class="composer-hint"><span>Enter to send · Shift+Enter for newline</span><span id="status">Ready</span></div>
 </div></main></div>
 <div class="modal" id="modal" onclick="closeModal(event)">
 <div class="modal-content" onclick="event.stopPropagation()">
@@ -1675,9 +1911,30 @@ onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
 <script>
 const state = {provider:"deepseek", model:"deepseek-chat", agent:false, convId:null,
                 messages:[], streaming:false, config:{}};
+const SIDEBAR_KEY = 'ayhanx_sidebar_collapsed';
 const $ = s => document.querySelector(s);
 const input = $('#input'), sendBtn = $('#send-btn'), chat = $('#chat'),
       status = $('#status'), welcome = $('#welcome');
+
+function toggleSidebarCollapse(){
+  const sb = $('#sidebar');
+  const isCollapsed = sb.classList.toggle('collapsed');
+  document.body.classList.toggle('collapsed', isCollapsed);
+  $('#collapse-btn').title = isCollapsed ? 'Show sidebar' : 'Hide sidebar';
+  try { localStorage.setItem(SIDEBAR_KEY, isCollapsed ? '1' : '0'); } catch(_){}
+}
+
+function restoreSidebar(){
+  try {
+    if (localStorage.getItem(SIDEBAR_KEY) === '1'){
+      $('#sidebar').classList.add('collapsed');
+      document.body.classList.add('collapsed');
+      $('#collapse-btn').title = 'Show sidebar';
+    }
+  } catch(_){}
+}
+
+function toggleSidebar(){ $('#sidebar').classList.toggle('open'); }
 
 function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function md(text){
@@ -1946,11 +2203,10 @@ function newConversation(){
   loadConversations(); input.focus();
 }
 
-function toggleSidebar(){ $('#sidebar').classList.toggle('open'); }
-
 (async function init(){
   await loadConfig();
   await loadConversations();
+  restoreSidebar();
   input.focus();
   setStatus('Ready');
 })();
@@ -1966,6 +2222,20 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", "8080"))
     host = os.environ.get("HOST", "0.0.0.0")
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind((host, port)); s.close()
+    except OSError:
+        s.close()
+        new_port = find_free_port(port, port + 120)
+        if new_port:
+            print(f"  ! port {port} busy — using {new_port} instead")
+            port = new_port
+        else:
+            print(f"  ✘ no free port found in {port}-{port+120}")
+            import sys; sys.exit(1)
+
     print(f"\n  ◆ AyhanX-Agent web UI")
     print(f"  → http://localhost:{port}\n")
     uvicorn.run(app, host=host, port=port, log_level="warning")
@@ -2033,7 +2303,7 @@ except Exception: current = ""
 names = list(data)
 for i, n in enumerate(names, 1):
     marker = "◆" if n == current else " "
-    print(f"    {i})  {marker} {n:<12} → {data[n]['model']}")
+    print(f"    {i})  {marker} {n:<14} → {data[n]['model']}")
 print()
 choice = input("  > ").strip()
 if choice.isdigit():
@@ -2083,7 +2353,7 @@ if r.status_code >= 400:
     except Exception: msg = r.text
     hints = {401: "invalid key", 402: "no balance", 404: "model not found", 429: "rate limited"}
     hint = hints.get(r.status_code, "")
-    if provider in ("ollama","lmstudio","vllm","llamacpp","localai"): hint = "is the server running?"
+    if provider in ("ollama","lmstudio","vllm","llamacpp","localai","ollama-cloud"): hint = "is the server running?"
     print(f"HTTP {r.status_code}: {msg}" + (f" ({hint})" if hint else ""), file=sys.stderr); sys.exit(1)
 print(r.json()["choices"][0]["message"]["content"])
 PY
@@ -2106,7 +2376,7 @@ print(f"  {M}provider{N}  {provider}")
 print(f"  {M}endpoint{N}  {base}")
 print(f"  {M}model{N}     {model}")
 try:
-    if provider in ("ollama","lmstudio","vllm","llamacpp","localai"):
+    if provider in ("ollama","lmstudio","vllm","llamacpp","localai","ollama-cloud"):
         try:
             mr = httpx.get(f"{base}/models", headers=h, timeout=10)
             if mr.status_code == 200:
@@ -2124,7 +2394,7 @@ try:
         print(f"  {M}body{N}      {r.text[:300]}")
         print(f"  {R}✘ failed{N}")
 except Exception as e:
-    hint = "  → is the server running?" if provider in ("ollama","lmstudio","vllm","llamacpp","localai") else ""
+    hint = "  → is the server running?" if provider in ("ollama","lmstudio","vllm","llamacpp","localai","ollama-cloud") else ""
     print(f"  {R}✘ {type(e).__name__}: {e}{N}{hint}")
 PY
 }
@@ -2136,6 +2406,7 @@ cmd_config() {
   info "env      $ENV_FILE"
   info "providers $PROVIDERS_FILE"
   info "chats    $CHATS_DIR"
+  info "design   $DESIGN_FILE"
   echo
   [[ -f "$PROVIDERS_FILE" ]] && { section "Providers"; cat "$PROVIDERS_FILE"; echo; }
   [[ -f "$CONFIG_FILE" ]] && { section "Config"; cat "$CONFIG_FILE"; echo; }
@@ -2147,6 +2418,7 @@ cmd_version() {
   info "repo       $REPO_URL"
   info "provider   ${AYHANX_PROVIDER:-deepseek}"
   info "app dir    $APP_DIR"
+  [[ -f "$DESIGN_FILE" ]] && info "design     cached from DESIGN.md"
   [[ -x "$VENV/bin/python" ]] && info "python     $("$VENV/bin/python" --version 2>&1)"
 }
 
