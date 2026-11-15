@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-#   AyhanX-Agents · universal terminal + web client for LLMs
+#   AyhanX-Agent · universal terminal + web client for LLMs
 #   Repository:  https://github.com/AyhanMansur/AyhanX-Agent
 #   Version:     5.0.0
 #   23 providers: deepseek · openrouter · groq · google · mistral · together
